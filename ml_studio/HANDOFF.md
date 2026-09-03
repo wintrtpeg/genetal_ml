@@ -18,19 +18,78 @@
 
 ## 2. 지금 상태 — 한 줄로
 
-**기능은 전부 구현됐고 테스트 360건이 통과합니다. 남은 것은 "실제 환경에서
-눈으로 보는 검증" 뿐입니다.**
+**기능은 전부 구현됐고 테스트 368건이 통과합니다. 브라우저 렌더링까지
+확인했습니다. 남은 것은 SQream 실접속과 실데이터입니다.**
 
 | 층위 | 상태 |
 |---|---|
 | 원래 요청 12가지 | 전부 구현 |
 | 로드맵 16개 + 추가 요청 | 전부 구현 |
-| 자동 검증 | **360건 통과, 0 실패** |
+| 자동 검증 | **368건 통과, 0 실패** |
 | 화면 실행 검증 | 대역으로 10개 화면 × 상태 40여 조합 실행 |
-| **진짜 브라우저 렌더링** | **미확인** — 레이아웃·색·체감속도. ← 지금 여기 |
-| **진짜 plotly/shap/부스팅** | **확인됨** (12차, 집 PC) — SHAP 3경로·부스팅 3종·차트 22종 통과 |
-| **SQream 실접속** | **미확인** — 계정 필요 |
+| **진짜 브라우저 렌더링** | **확인됨** (17차) — 아래 참조 |
+| **진짜 plotly/shap/부스팅** | **확인됨** (12차·17차) — SHAP 3경로·부스팅 3종·차트 22종 |
+| **SQream 실접속** | **미확인** — 계정 필요. ← 지금 여기 |
 | **실데이터** | **미확인** — 가상 데이터로만 검증 |
+
+### 브라우저 렌더링 — 17차에 확인한 것
+
+streamlit 1.63 · pandas 3.0 · numpy 2.4 · plotly 7.0 · scikit-learn 1.9 ·
+shap 0.51 · xgboost 3.2 · lightgbm 4.7 · catboost 1.2 를 실제로 설치하고,
+headless Chromium 으로 화면을 눌러 가며 확인했습니다.
+
+  · 1~4단계를 실데이터 흐름 그대로 (가상 데이터 → 시간축 → 품질 → 파생 →
+    누수 점검 → 학습) 진행. 예외 0건.
+  · Auto 모드로 챔피언까지 돌린 뒤 5~9단계와 설정까지 전부 렌더링. 예외 0건,
+    브라우저 콘솔 오류 0건.
+  · `scripts/verify_env.py` 38건 전항목 통과 (건너뜀 0).
+
+**여기서 세 가지가 새로 나왔습니다** — 대역으로는 잡히지 않던 것들입니다.
+
+1. `use_container_width` 는 streamlit 이 "2025-12-31 이후 제거" 를 예고한
+   인자입니다. 그 날짜는 이미 지났습니다. 화면 100군데가 쓰고 있어 지워지는
+   순간 표·차트·버튼이 전부 죽습니다. `theme.WIDE` 로 판정을 한 곳에 모았고,
+   **이름이 아니라 기본값의 타입**으로 신·구를 가릅니다 — 옛 streamlit 에도
+   `width` 가 있었지만 픽셀 정수였습니다.
+
+2. **사이드바 레일을 눌러도 단계가 안 넘어갔습니다.** key 가 붙은 위젯은
+   고른 값을 session_state 에 먼저 쓰고 재실행하는데, 그때 `_step` 은 아직
+   이전 단계라 맞추기 코드가 방금 고른 값을 덮었습니다. `on_change` 로
+   옮깁니다. 대역의 radio 는 key 도 session_state 도 보지 않아 40여 조합이
+   전부 통과하면서도 못 잡았습니다.
+
+3. [진행상황 표시] 가 켜져 있으면 **병렬 학습이 통째로 꺼졌습니다.** 기본이
+   켜짐이라 기본 경로가 곧 순차였고, 바로 옆 [병렬 · 전체 코어] 는 조용히
+   무시됐습니다. joblib 제너레이터로 둘 다 살렸습니다.
+
+### 학습 시간 — 측정값 (17차)
+
+데모 데이터가 3단계를 지난 모양(학습 8,272행 × 77피처 · 5폴드)에서 모델별
+소요 시간입니다. 모델 하나당 코어 하나 기준.
+
+| 모델 | 시간 | | 모델 | 시간 |
+|---|---:|---|---|---:|
+| Ridge | 0.5초 | | CatBoost | 17.5초 |
+| ElasticNet | 0.6초 | | SVM | 23.5초 |
+| KNN | 0.8초 | | LightGBM | 42.5초 |
+| DecisionTree | 1.4초 | | XGBoost | 48.0초 |
+| MLP | 7.6초 | | **ExtraTrees** | **114.5초** |
+| HistGradientBoosting | 9.9초 | | **RandomForest** | **315.9초** |
+
+기본 선택 12종 합계가 약 9.7분입니다. 병렬을 살린 뒤 4코어에서 약 5.3분이
+되는데, **더는 안 줄어듭니다 — RandomForest 한 종이 316초라 거기서 막힙니다.**
+나무 400 그루(`n_estimators=400`)가 원인입니다.
+
+느린 것은 `heavy` 로 표시된 KNN·SVM·MLP 가 아니라 RandomForest·ExtraTrees
+입니다. 그런데 `default_selection` 은 5만 행이 넘으면 `family == "ensemble"`
+이라는 이유로 **이 둘을 남기고 빠른 셋을 뺍니다.** 큰 데이터에서 SVM 이
+못 쓰게 되는 것을 막으려는 규칙이라 그 자체로 틀린 것은 아니지만, 지금
+크기에서는 정반대로 작동합니다. 기본값을 바꾸면 분석 결과가 달라지므로
+건드리지 않았습니다 — 판단이 필요하면 다음 셋 중 하나입니다.
+
+  · `n_estimators` 를 400 → 200 으로 (정확도 영향 확인 필요)
+  · 고른 모델이 적을 때 `n_jobs_model` 을 올려 코어를 채우기
+  · `default_selection` 에서 큰 데이터일 때 RandomForest 를 빼기
 
 ---
 
@@ -143,7 +202,7 @@ app/           Streamlit 화면 (core 를 호출만 함)
   advice_ui    추천을 화면에 붙이는 공통 부품 (why · deviation · limits_form)
   views/       10개 화면
 
-tests/         360건
+tests/         368건
   fake_streamlit / fake_plotly   대역 — 화면을 실제로 실행하기 위한 것
   test_view_render               화면 10개 × 상태 40여 조합
   test_runtime_guards            실행 오류 · 성능 · 누수 접근권
@@ -189,14 +248,37 @@ scripts/
 | 점검 스크립트의 가짜 데이터 | 제품이 내는 컬럼과 다르면 가짜 경보가 난다 |
 | 드라이버 없음 ≠ 결함 | SQLAlchemy 는 `NoSuchModuleError` 를 던진다. 건너뜀으로 분류 |
 | `SystemExit(문자열)` | `.code` 가 문자열이라 `int()` 가 터진다 |
+| 대역이 key 를 안 본다 | 레일 radio 가 안 먹는데 40여 조합이 다 통과했다. 대역의 radio 는 `key`·session_state 를 무시한다 |
+| 위젯 앞뒤로 같은 값 맞추기 | 위젯 **전에** 맞추면 사용자의 선택을 덮고, **후에** 읽으면 이미 덮인 값이다. `on_change` 로 가른다 |
+| 진행표시가 병렬을 껐다 | 붙어 있는 두 설정 중 하나가 다른 하나를 지우는데 도움말 한 줄에만 있었다 |
+| 제거 예고일이 지난 인자 | `use_container_width` 는 2025-12-31 예고. 경고가 288줄씩 찍히는데 아무도 안 읽었다 |
+| `width` 는 이름이 같고 뜻이 다르다 | 옛 streamlit 에서는 픽셀 정수였다. 이름으로 신·구를 가르면 조용히 다르게 그려진다 |
+| 깨진 라이브러리 ≠ 없는 라이브러리 | 깔려 있는데 못 쓰는 것을 "설치하세요" 로 안내하면 pip 이 already satisfied 라 답한다. 빠져나올 수 없다 |
+| 느린 모델은 `heavy` 가 아니었다 | RandomForest 316초 · ExtraTrees 115초. 정작 `heavy` 로 표시된 KNN 은 0.8초다 |
 
 ---
 
 ## 8. 이 환경(클라우드 컨테이너)의 제약
 
-작업하는 쪽 컨테이너는 **패키지 저장소가 막혀 있습니다** (`pypi.org` 403,
-미러·github raw 전부 차단, 로컬 wheel 없음). 그래서 이쪽에는
-**streamlit · plotly · shap · 부스팅 3종 · SQLAlchemy 가 없습니다.**
+세션마다 다릅니다. **먼저 `pip install` 이 되는지 한 번 해 보세요.**
+
+지금까지의 컨테이너는 패키지 저장소가 막혀 있었습니다 (`pypi.org` 403). 그래서
+streamlit·plotly·shap·부스팅 3종이 없었고, 그 코드는 한 번도 실행된 적이
+없었습니다 — `scripts/verify_env.py` 가 있는 이유입니다.
+
+**17차 컨테이너는 열려 있었습니다.** 전부 설치하고 headless Chromium 으로
+화면까지 눌러 봤습니다 (2절 참조). 되는 환경이라면 이 순서가 가장 빠릅니다.
+
+    pip install -r requirements-core.txt && pip install -r requirements-extra.txt
+    python tests/run_tests.py          # 368건
+    python scripts/verify_env.py       # 38건 — 차트·SHAP·부스팅·SQL·리포트
+    python scripts/smoke_test.py       # end-to-end
+    python -m streamlit run app/main.py --server.headless true &
+    # Chromium 은 /opt/pw-browsers 에 있습니다 (playwright install 하지 마세요)
+
+주의 — `pip install pysqream-sqlalchemy` 를 제약 없이 그냥 넣으면 numpy 가
+2.x → 1.26 으로 내려가 shap 이 깨집니다. `scripts/setup.py` 는 이걸 막으려고
+핵심 4종을 제약 파일에 고정합니다. 손으로 깔 때는 그 보호가 없습니다.
 
 - 있는 것: pandas, numpy, scikit-learn, scipy, joblib, PyYAML
 - 그래서 누수 검증·학습·스모크 테스트는 전부 여기서 돌아갑니다

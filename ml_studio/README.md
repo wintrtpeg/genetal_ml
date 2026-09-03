@@ -39,17 +39,21 @@ run.bat           # Windows (더블클릭해도 됩니다)
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements-core.txt     # 반드시 성공해야 합니다
 pip install -r requirements-extra.txt    # 실패해도 무방합니다
-python tests/run_tests.py                # 360건 — 여기가 통과해야 결과를 믿을 수 있습니다
+python tests/run_tests.py                # 368건 — 여기가 통과해야 결과를 믿을 수 있습니다
 python scripts/verify_env.py             # 이 PC 에서만 확인되는 것들 (차트·SHAP·부스팅·SQL)
 python scripts/make_demo_data.py         # 가상 데이터 (선택)
 streamlit run app/main.py
 ```
 
-`verify_env.py` 는 `run.bat` 첫 실행에 이미 포함돼 있습니다. 차트 21종·SHAP 3경로·
-부스팅 3종·SQream 엔진·HTML 리포트를 실제로 한 번씩 돌려 봅니다. 이 도구를 만든
-환경에는 그 라이브러리들이 없어서 해당 코드가 실행된 적이 없으므로, 설치가 끝난
-PC 에서 한 번 훑는 창구입니다. 실패하면 마지막에 나오는 "실패 항목" 블록을
-그대로 알려 주시면 됩니다.
+`verify_env.py` 는 `run.bat` 첫 실행에 이미 포함돼 있습니다. 차트 22종·SHAP 3경로·
+앙상블 분해·부스팅 3종·SQream 엔진·HTML 리포트를 실제로 한 번씩 돌려 봅니다.
+설치된 라이브러리 조합은 PC 마다 다르고, "이 버전에서 그 인자가 사라졌는가" 같은
+것은 실제로 불러 봐야 알 수 있어서 두는 창구입니다. **38건 전항목 통과**가
+정상입니다. 실패하면 마지막에 나오는 "실패 항목" 블록을 그대로 알려 주시면 됩니다.
+
+건너뜀으로 끝난 항목은 그 라이브러리를 안 깔았다는 뜻입니다. 깔았는데도 안 되면
+건너뜀이 아니라 **실패**로 잡히고 버전 조합 문제라고 알려 줍니다 — 이미 깔린
+패키지를 다시 깔라는 안내로 돌려보내지 않기 위한 것입니다.
 
 파이썬 **3.10 ~ 3.12** 를 권합니다.
 
@@ -238,7 +242,7 @@ print(res.decisions)     # 무엇이 어떻게 정해졌는지
 | Random split 격리 | 진단으로만 제공하고, 평가 경로 유입은 예외로 막습니다 |
 | nested CV 탐색 | 하이퍼파라미터를 고른 구간과 점수를 낸 구간을 분리합니다 (기본 OFF) |
 
-`python tests/run_tests.py` 로 360건이 이 장치들을 검증합니다.
+`python tests/run_tests.py` 로 368건이 이 장치들을 검증합니다.
 누수가 있으면 **실패하도록** 짜여 있어서, 전부 통과해야 결과를 믿을 수 있습니다.
 
 ---
