@@ -1300,3 +1300,33 @@ def test_theme_wide_falls_back_when_width_is_pixels():
         assert theme._wide_kwargs() == {"use_container_width": True}
     finally:
         st.dataframe = keep
+
+
+# ── 7. 사이드바 레일이 실제로 단계를 옮기는가 ────────────────
+# **레일을 눌러도 화면이 안 바뀌었다.** 눈으로 보기 전까지 아무도 몰랐다.
+#
+# 원인 — key 가 붙은 위젯은 사용자가 고른 값을 session_state 에 먼저 써 두고
+# 화면을 다시 그린다. 그 시점의 _step 은 아직 이전 단계다. 그런데 코드가
+# 위젯을 만들기 **전에** _rail 을 _step 에 맞추고 있어서, 방금 고른 값이
+# 덮여 사라졌다. 위젯 뒤에서 반환값을 읽어 봐야 이미 되돌려진 값이었다.
+#
+# 대역(fake_streamlit)의 radio 는 key 도 session_state 도 보지 않는다. 그래서
+# 화면 렌더링 테스트 40여 조합이 전부 통과하면서도 이걸 못 잡았다. 대역을
+# 진짜처럼 만드는 것은 별개의 큰 일이므로, 여기서는 **깨졌던 형태로 되돌아가지
+# 않는 것**을 소스에서 지킨다.
+def test_rail_moves_the_step_through_on_change():
+    src = (APP / "main.py").read_text(encoding="utf-8")
+    i = src.index('key="_rail"')
+    around = src[max(0, i - 700):i + 200]
+
+    assert "on_change=" in around, (
+        "레일 radio 에 on_change 가 없습니다. 위젯 반환값으로 _step 을 옮기면 "
+        "사용자가 고른 값이 덮여서 레일을 눌러도 화면이 안 바뀝니다.")
+
+    # 깨졌던 형태: 위젯 뒤에서 반환값을 읽어 _step 에 넣는 것
+    after = src[i:i + 400]
+    assert not re.search(r"choice\s*=", around), (
+        "레일 radio 의 반환값을 받고 있습니다 — 그 값은 이미 _step 으로 "
+        "되돌려진 뒤라 클릭이 반영되지 않습니다. on_change 를 쓰세요.")
+    assert 'S["_step"] = keys[choice]' not in after, (
+        "위젯 반환값으로 _step 을 옮기는 옛 형태가 남아 있습니다.")

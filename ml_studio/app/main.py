@@ -62,16 +62,25 @@ def _rail() -> str:
         # '다음 단계' 버튼과 사이드바가 같은 값을 보도록 _step 을 기준으로 삼는다.
         # key 가 붙은 위젯은 index 를 무시하고 session_state 값을 따르므로,
         # 위젯을 만들기 **전에** 그 값을 맞춰 둬야 버튼으로 옮긴 단계가 반영된다.
+        #
+        # **다만 그 맞추기가 레일 클릭을 잡아먹었다.** 사용자가 레일을 고르면
+        # streamlit 은 고른 값을 _rail 에 먼저 써 두고 화면을 다시 그리는데,
+        # 그 시점의 _step 은 아직 이전 단계다. 그대로 _rail 을 _step 에 맞추면
+        # 방금 고른 값이 덮여 사라진다 — 레일을 눌러도 화면이 안 바뀌었다.
+        # 위젯 뒤에서 읽어 봐야 이미 되돌려진 값이라 소용이 없었다.
+        #
+        # on_change 는 다시 그리기 **전에** 돌기 때문에, 여기서 _step 을 옮기면
+        # 뒤따르는 맞추기가 같은 값을 보게 되어 서로 싸우지 않는다.
+        def _rail_pick() -> None:
+            S["_step"] = keys[S["_rail"]]
+
         cur = nav.current()
         idx = keys.index(cur) if cur in keys else 0
         if S.get("_rail") != idx:
-            S["_rail"] = idx
-        choice = st.radio("단계", options=range(len(labels)),
-                          format_func=fmt, label_visibility="collapsed",
-                          key="_rail")
-        if keys[choice] != cur:
-            S["_step"] = keys[choice]
-            cur = keys[choice]
+            S["_rail"] = idx          # 하단 버튼으로 옮긴 단계를 레일에 반영
+        st.radio("단계", options=range(len(labels)),
+                 format_func=fmt, label_visibility="collapsed",
+                 key="_rail", on_change=_rail_pick)
 
         st.caption("● 완료   ◉ 현재   ○ 대기")
 
