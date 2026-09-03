@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from app import advice_ui, state
+from app import advice_ui, state, theme
 from core import advisor, features, models, preprocess
 
 
@@ -273,7 +273,7 @@ def _controls() -> features.FeatureConfig:
         if not spec.empty:
             with st.expander(f"분 → 행 환산 (샘플링 간격 {step:g}분)", expanded=False):
                 st.caption("행 수로 환산된 값이 lookback 이 되고, 그대로 gap 점검의 기준이 됩니다.")
-                st.dataframe(spec, use_container_width=True, hide_index=True)
+                st.dataframe(spec, **theme.WIDE, hide_index=True)
     return cfg
 
 
@@ -372,7 +372,7 @@ def _selection_panel() -> None:
             holdout_ratio=ratio, unseen_ratio=unseen if mode == "비율" else 0.15,
             gap=gap, valid_cut=valid_cut, unseen_cut=unseen_cut)
         preview = validation.build_split(cfg_split, idx)
-        st.dataframe(preview.describe(idx), use_container_width=True, hide_index=True)
+        st.dataframe(preview.describe(idx), **theme.WIDE, hide_index=True)
         if not preview.three_way:
             st.warning("Final Unseen 이 없습니다. 홀드아웃이 모델 선택과 최종 보고를 겸하므로 "
                        "보고되는 성능이 낙관 편향됩니다. (2분할 — 구버전 호환 모드)")
@@ -483,21 +483,21 @@ def _review_gate() -> None:
         st.caption("파생이 많을 때는 이 단위가 빠릅니다. **한 원본에서 나온 파생이 "
                    "통째로 0개**라면 그 태그를 다시 보세요 — 센서가 죽었거나 "
                    "정말 무관하다는 뜻입니다.")
-        st.dataframe(roll, use_container_width=True, hide_index=True, height=240)
+        st.dataframe(roll, **theme.WIDE, hide_index=True, height=240)
 
     # ── 일괄 선택 ──
     st.markdown("**일괄 선택**")
     b1, b2, b3, b4, b5 = st.columns(5)
-    if b1.button("자동 추천대로", use_container_width=True):
+    if b1.button("자동 추천대로", **theme.WIDE):
         _bulk(sorted(auto))
-    if b2.button("전체 선택", use_container_width=True):
+    if b2.button("전체 선택", **theme.WIDE):
         _bulk(list(review["feature"]))
-    if b3.button("전체 해제", use_container_width=True):
+    if b3.button("전체 해제", **theme.WIDE):
         _bulk([])
-    if b4.button("원본 컬럼만", use_container_width=True,
+    if b4.button("원본 컬럼만", **theme.WIDE,
                  help="lag·rolling 같은 파생 없이 원본 그대로인 피처만 남깁니다."):
         _bulk(list(review.loc[review["transform"] == "raw", "feature"]))
-    if b5.button("MI 상위 30", use_container_width=True):
+    if b5.button("MI 상위 30", **theme.WIDE):
         top = review.sort_values("mutual_info", ascending=False, na_position="last")
         _bulk(list(top["feature"].head(30)))
 
@@ -536,7 +536,7 @@ def _review_gate() -> None:
     show = show[[c for c in cols if c in show.columns]]
 
     edited = st.data_editor(
-        show, use_container_width=True, hide_index=True, height=420,
+        show, **theme.WIDE, hide_index=True, height=420,
         key=f"feat_editor_{S.get('review_gen', 0)}_{f_origin}_{f_transform}"
             f"_{keyword}_{only_auto}",
         column_config={
@@ -582,7 +582,7 @@ def _review_gate() -> None:
             st.caption("**막지 않습니다.** '이 태그는 물리적으로 반드시 들어가야 "
                        "한다' 는 판단을 도구가 뒤집으면 안 되니까요. 다만 무엇을 "
                        "감수하시는지는 알려 드립니다.")
-            st.dataframe(risks, use_container_width=True, hide_index=True)
+            st.dataframe(risks, **theme.WIDE, hide_index=True)
 
     changed_add = sorted(picks - auto)
     changed_del = sorted(auto - picks)
@@ -594,7 +594,7 @@ def _review_gate() -> None:
     st.divider()
     c1, c2 = st.columns([1, 3])
     if c1.button("이 목록으로 확정", type="primary", disabled=not picks,
-                 use_container_width=True):
+                 **theme.WIDE):
         from core import train as _train
 
         chosen, updated = features.apply_manual_selection(review, sorted(picks))
@@ -623,4 +623,4 @@ def _review_gate() -> None:
             st.caption("출처 대장이 없습니다. 파생변수를 다시 생성하면 만들어집니다.")
         else:
             st.dataframe(prov[prov["feature"].isin(sorted(picks))],
-                         use_container_width=True, hide_index=True, height=300)
+                         **theme.WIDE, hide_index=True, height=300)

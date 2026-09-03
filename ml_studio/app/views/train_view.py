@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import time
+
 import pandas as pd
 import streamlit as st
 
-from app import state
+from app import state, theme
 from core import (
     ensemble, models, plots, preprocess, train, tuning, unsupervised, validation,
 )
@@ -57,7 +59,7 @@ def _supervised() -> None:
     st.markdown('<p class="caption">구간 분할은 3단계에서 확정됩니다. 여기서는 바꾸지 않습니다 — '
                 '학습 화면에서 다시 나누면 선별에 쓴 구간이 평가 구간으로 넘어갑니다.</p>',
                 unsafe_allow_html=True)
-    st.dataframe(sp.describe(X.index), use_container_width=True, hide_index=True)
+    st.dataframe(sp.describe(X.index), **theme.WIDE, hide_index=True)
 
     c1, c2, c3 = st.columns(3)
     # 불러온 설정의 폴드 수가 범위를 벗어나 있으면 위젯이 예외를 던진다.
@@ -90,12 +92,12 @@ def _supervised() -> None:
     c1, c2 = st.columns([2, 3])
     with c1:
         st.markdown("**누수 점검**")
-        st.dataframe(check, use_container_width=True, hide_index=True)
+        st.dataframe(check, **theme.WIDE, hide_index=True)
     with c2:
         st.markdown("**교차검증 폴드**")
         try:
             st.dataframe(validation.audit_splits(X.index, validation.make_cv(split), len(tr)),
-                         use_container_width=True, hide_index=True, height=240)
+                         **theme.WIDE, hide_index=True, height=240)
         except validation.LeakageError as e:
             st.error(str(e))
             failed = True
@@ -113,7 +115,8 @@ def _supervised() -> None:
     n_jobs = c1.selectbox("병렬", [-1, 1, 2, 4, 8], index=0,
                           format_func=lambda v: "전체 코어" if v == -1 else f"{v} 프로세스")
     show_progress = c2.checkbox("진행상황 표시", value=True,
-                                help="켜면 순차 실행합니다. 끄면 모델을 동시에 돌립니다.")
+                                help="어느 모델까지 끝났는지 막대로 보여줍니다. "
+                                     "켜도 병렬은 그대로 쓰므로 느려지지 않습니다.")
     missing = [n for n in ("XGBoost", "LightGBM", "CatBoost") if n not in zoo]
     if missing:
         c3.caption(f"미설치로 제외: {', '.join(missing)}")
@@ -173,10 +176,18 @@ def _supervised() -> None:
         S.train_config = cfg
 
         bar, label = st.progress(0.0), st.empty()
+        started = time.monotonic()
 
         def tick(i, total, name):
+            # i 는 **끝난 개수**다. 예전에는 시작 전에 세서 막대가 실제보다
+            # 한 칸 앞서 있었다 — 첫 모델을 붙잡고 있는데 10% 가 차 있었다.
+            #
+            # 경과 시간을 같이 적는다. 모델 하나가 몇 분씩 걸리는 일이 흔한데
+            # (RandomForest 는 나무 400 그루다) 숫자가 안 움직이면 멈춘 것처럼
+            # 보인다. 시간이 흐르는 것만 보여도 "돌고 있다" 가 전해진다.
             bar.progress(i / total)
-            label.caption(f"{i}/{total} · {name}")
+            el = int(time.monotonic() - started)
+            label.caption(f"{i}/{total} 완료 · {name} · {el // 60}분 {el % 60}초 경과")
 
         try:
             board, detail = train.train_all(
@@ -279,7 +290,7 @@ def _unseen_panel(metric: str) -> None:
         "검증 점수와 Final Unseen 점수의 차이입니다. 검증 구간은 여러 모델 중 하나를 "
         "고르는 데 이미 쓰였으므로, 그 점수에는 '운 좋게 잘 맞은 정도'가 섞여 있습니다. "
         "그 거품이 얼마였는지를 여기서 처음 보게 됩니다.")
-    st.dataframe(bias, use_container_width=True, hide_index=True)
+    st.dataframe(bias, **theme.WIDE, hide_index=True)
     st.caption(
         "읽는 법 — 차이가 작으면(대략 검증 점수의 5% 안쪽) 모델 선택이 안정적이었다는 "
         "뜻입니다. 차이가 크면 검증 구간에만 맞춘 모델일 수 있으니, 후보 모델 수를 줄이거나 "
@@ -308,7 +319,7 @@ def _leaderboard_panel(metric: str) -> None:
     ok = board[board["status"] == "ok"]
     if ok.empty:
         st.error("성공한 모델이 없습니다.")
-        st.dataframe(board, use_container_width=True, hide_index=True)
+        st.dataframe(board, **theme.WIDE, hide_index=True)
         return
 
     cols = ["rank", "model", "family"]
@@ -316,9 +327,9 @@ def _leaderboard_panel(metric: str) -> None:
     cols += [c for c in board.columns if c.startswith("holdout_")]
     cols += [c for c in ("insample_R2", "fit_seconds") if c in board.columns]
     st.dataframe(board[[c for c in cols if c in board.columns]],
-                 use_container_width=True, hide_index=True, height=340)
+                 **theme.WIDE, hide_index=True, height=340)
 
-    st.plotly_chart(plots.leaderboard_bar(board, metric), use_container_width=True)
+    st.plotly_chart(plots.leaderboard_bar(board, metric), **theme.WIDE)
 
     gap_rows = []
     for _, r in ok.iterrows():
@@ -329,7 +340,7 @@ def _leaderboard_panel(metric: str) -> None:
     if gap_rows:
         with st.expander("과적합 점검 (학습 대비 검증)"):
             st.caption("차이가 크면 학습 구간에만 맞춰진 모델입니다.")
-            st.dataframe(pd.DataFrame(gap_rows), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(gap_rows), **theme.WIDE, hide_index=True)
 
     tuned = [n for n, r in S.detail.items() if r.get("tuned")]
     if tuned:
@@ -341,7 +352,7 @@ def _leaderboard_panel(metric: str) -> None:
                 st.markdown(f"**{n}** — 최종 선택: `{rec.get('best_params', '-')}`")
                 ps = rec.get("_param_stability")
                 if ps is not None and not ps.empty:
-                    st.dataframe(ps, use_container_width=True, hide_index=True)
+                    st.dataframe(ps, **theme.WIDE, hide_index=True)
                     if (ps["안정성"] == "흔들림").any():
                         st.caption("폴드마다 다른 값이 뽑힌 파라미터가 있습니다. "
                                    "그 축은 데이터가 결정해 주지 않는다는 뜻이라 "
@@ -351,12 +362,12 @@ def _leaderboard_panel(metric: str) -> None:
         with st.expander("폴드 내부 선별 안정성"):
             st.caption("폴드마다 다시 선별한 결과의 중복도입니다. Jaccard 가 낮으면 어떤 피처를 "
                        "고르는지가 구간마다 흔들린다는 뜻이라, 피처 해석을 조심해야 합니다.")
-            st.dataframe(S.fold_stability, use_container_width=True, hide_index=True)
+            st.dataframe(S.fold_stability, **theme.WIDE, hide_index=True)
 
     failed = board[board["status"] != "ok"]
     if not failed.empty:
         with st.expander(f"실패한 모델 {len(failed)}개"):
-            st.dataframe(failed[["model", "error"]], use_container_width=True, hide_index=True)
+            st.dataframe(failed[["model", "error"]], **theme.WIDE, hide_index=True)
 
     names = list(ok["model"])
     pick = st.selectbox("챔피언", names, index=names.index(S.champion) if S.champion in names else 0)
@@ -430,12 +441,12 @@ def _ensemble_panel(metric: str, zoo: dict) -> None:
         st.caption(f"단일 최고 모델 대비 "
                    f"{getattr(S.train_config, 'ensemble_threshold', 0.03):.0%} 이상 "
                    "좋아진 앙상블만 챔피언이 됩니다 (SPEC §17).")
-        st.dataframe(S.ensemble_report, use_container_width=True, hide_index=True)
+        st.dataframe(S.ensemble_report, **theme.WIDE, hide_index=True)
         w = S.detail.get("Ensemble_Weighted", {}).get("_pipeline")
         if w is not None and getattr(w, "weights_", None) is not None:
             with st.expander("가중앙상블 가중치"):
                 st.caption("nnls 로 구한 음수 없는 가중치입니다. 합은 1 입니다.")
-                st.dataframe(w.weight_table(), use_container_width=True, hide_index=True)
+                st.dataframe(w.weight_table(), **theme.WIDE, hide_index=True)
 
 
 
@@ -481,14 +492,14 @@ def _unsupervised() -> None:
             st.rerun()
 
         if S.unsup_board is not None and not S.unsup_board.empty:
-            st.dataframe(S.unsup_board, use_container_width=True, hide_index=True)
+            st.dataframe(S.unsup_board, **theme.WIDE, hide_index=True)
             keys = [k for k in S.unsup_detail]
             pick = st.selectbox("상세", keys)
             labels = S.unsup_detail[pick]["labels"]
-            st.plotly_chart(plots.cluster_timeline(labels), use_container_width=True)
+            st.plotly_chart(plots.cluster_timeline(labels), **theme.WIDE)
             st.markdown("**군집별 평균**")
             st.dataframe(unsupervised.cluster_profile(X, labels),
-                         use_container_width=True, hide_index=True, height=320)
+                         **theme.WIDE, hide_index=True, height=320)
 
     elif mode == "이상탐지":
         c1, c2 = st.columns(2)
@@ -504,15 +515,15 @@ def _unsupervised() -> None:
             st.rerun()
 
         if S.unsup_board is not None and not S.unsup_board.empty:
-            st.dataframe(S.unsup_board, use_container_width=True, hide_index=True)
+            st.dataframe(S.unsup_board, **theme.WIDE, hide_index=True)
             pick = st.selectbox("상세", list(S.unsup_detail))
             d = S.unsup_detail[pick]
             st.plotly_chart(plots.anomaly_timeline(d["score"], d["flag"]),
-                            use_container_width=True)
+                            **theme.WIDE)
             hits = d["flag"][d["flag"]]
             st.caption(f"이상 판정 {len(hits):,}건")
             if len(hits):
-                st.dataframe(X.loc[hits.index].head(200), use_container_width=True, height=300)
+                st.dataframe(X.loc[hits.index].head(200), **theme.WIDE, height=300)
 
     else:
         # 피처가 2~3개뿐이면 상한이 기본값(3)보다 작아져 슬라이더가 예외를 던진다.
@@ -534,7 +545,7 @@ def _unsupervised() -> None:
             for i, (c, v) in enumerate(zip(cols_, p["explained_variance_ratio"])):
                 c.metric(f"PC{i+1}", f"{v:.1%}", f"누적 {p['cumulative'][i]:.1%}")
             st.plotly_chart(plots.scatter_2d(p["scores"], "PC1", "PC2", title="주성분 공간"),
-                            use_container_width=True)
+                            **theme.WIDE)
             st.markdown("**적재량 (loadings)**")
             st.dataframe(p["loadings"].reset_index(names="feature"),
-                         use_container_width=True, hide_index=True, height=320)
+                         **theme.WIDE, hide_index=True, height=320)

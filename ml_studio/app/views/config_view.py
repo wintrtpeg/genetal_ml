@@ -74,7 +74,7 @@ def _mode_panel() -> None:
          "Auto": "숨김", "Guided": "보임", "Expert": "보임"},
         {"설정": "누수 방지 장치 전부",
          "Auto": "항상 켬", "Guided": "항상 켬", "Expert": "항상 켬"},
-    ]), use_container_width=True, hide_index=True, height=460)
+    ]), **theme.WIDE, hide_index=True, height=460)
     st.caption("'자동' 은 기본값으로 대신한다는 뜻이고, 무엇을 어떻게 정했는지는 "
                "실행 뒤 결정 표에 근거와 함께 남습니다. '항상 켬' 은 끌 수 없습니다.")
 
@@ -140,7 +140,7 @@ def _config_panel() -> None:
             return
 
         st.markdown("**바뀌는 항목**")
-        st.dataframe(d, use_container_width=True, hide_index=True)
+        st.dataframe(d, **theme.WIDE, hide_index=True)
         st.warning("설정을 바꾸면 파생변수부터 다시 실행해야 합니다. "
                    "이전 학습 결과는 무효가 됩니다.")
         if st.button("확인 — 적용하고 3단계부터 다시"):
@@ -232,7 +232,7 @@ def _challenger_panel() -> None:
     }, {
         "역할": "신규 (지금 run)", "모델": verdict["challenger"],
         f"unseen {metric}": verdict["challenger_score"],
-    }]), use_container_width=True, hide_index=True)
+    }]), **theme.WIDE, hide_index=True)
 
     c1, c2 = st.columns(2)
     c1.metric("개선율", f"{verdict['개선율']:+.2%}")
@@ -302,7 +302,7 @@ def _storage_panel() -> None:
         if p.runs:
             st.dataframe(pd.DataFrame(
                 [{"실행": d.name, "사유": p.reasons.get(d.name, "")} for d in p.runs]),
-                use_container_width=True, hide_index=True, height=180)
+                **theme.WIDE, hide_index=True, height=180)
         for k in p.kept[:5]:
             st.caption(f"· 남깁니다 — {k}")
 
@@ -326,13 +326,13 @@ def _storage_panel() -> None:
         return
 
     show = table[["실행", "용량", "생성", "일수", "보관", "모델", "리포트"]]
-    st.dataframe(show, use_container_width=True, hide_index=True, height=260)
+    st.dataframe(show, **theme.WIDE, hide_index=True, height=260)
 
     c1, c2, c3 = st.columns([2, 1, 1])
     pick = c1.selectbox("실행 선택", list(table["실행"]))
-    if c2.button("보관 지정", use_container_width=True):
+    if c2.button("보관 지정", **theme.WIDE):
         hk.pin(hk.RUNS_DIR / pick)
         st.rerun()
-    if c3.button("보관 해제", use_container_width=True):
+    if c3.button("보관 해제", **theme.WIDE):
         hk.unpin(hk.RUNS_DIR / pick)
         st.rerun()

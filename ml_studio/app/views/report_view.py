@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from app import state
+from app import state, theme
 from core import diagnostics, explain, persist, plots, report, train
 
 
@@ -61,7 +61,7 @@ def render() -> None:
 
     st.success(f"저장 위치 · `{S.run_dir}`")
     st.dataframe(pd.DataFrame([{"항목": k, "경로": v} for k, v in S.saved.items()]),
-                 use_container_width=True, hide_index=True)
+                 **theme.WIDE, hide_index=True)
 
     st.download_button("HTML 리포트 내려받기", S.report_html.encode("utf-8"),
                        file_name="ml_report.html", mime="text/html", type="primary")
@@ -70,7 +70,7 @@ def render() -> None:
 
     with st.expander("지난 실행 목록"):
         runs = persist.list_runs()
-        st.dataframe(runs, use_container_width=True, hide_index=True) if len(runs) \
+        st.dataframe(runs, **theme.WIDE, hide_index=True) if len(runs) \
             else st.caption("아직 없습니다.")
 
 
@@ -102,19 +102,19 @@ def _reproducibility_panel() -> None:
             st.dataframe(pd.DataFrame([
                 {"구간": k, "행수": v["rows"], "시작": v["start"], "끝": v["end"]}
                 for k, v in bounds.items()
-            ]), use_container_width=True, hide_index=True)
+            ]), **theme.WIDE, hide_index=True)
         else:
             st.caption("기록 없음")
     with c2:
         st.markdown("**패키지 버전**")
         pk = man.get("packages", {})
         st.dataframe(pd.DataFrame([{"패키지": k, "버전": v} for k, v in pk.items()]),
-                     use_container_width=True, hide_index=True, height=240)
+                     **theme.WIDE, hide_index=True, height=240)
 
     excluded = man.get("features_excluded", [])
     if excluded:
         with st.expander(f"제외 피처 사유 {len(excluded):,}건"):
-            st.dataframe(pd.DataFrame(excluded), use_container_width=True,
+            st.dataframe(pd.DataFrame(excluded), **theme.WIDE,
                          hide_index=True, height=300)
 
     with st.expander("지난 run 과 대조"):
@@ -136,7 +136,7 @@ def _reproducibility_panel() -> None:
                     st.success("대조한 항목이 모두 일치합니다.")
                 else:
                     st.warning(f"{len(diff)}개 항목이 다릅니다.")
-                st.dataframe(cmp, use_container_width=True, hide_index=True, height=320)
+                st.dataframe(cmp, **theme.WIDE, hide_index=True, height=320)
 
 
 def _config_snapshot() -> dict:

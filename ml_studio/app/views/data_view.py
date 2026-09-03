@@ -7,7 +7,7 @@ import json
 import pandas as pd
 import streamlit as st
 
-from app import state
+from app import state, theme
 from core import datasource, pipeline, plots
 
 SAMPLE_QUERY = """-- 시간 컬럼을 반드시 함께 뽑고 시간순으로 정렬하세요.
@@ -108,10 +108,10 @@ def _csv_panel() -> None:
         st.rerun()
 
     c1, c2 = st.columns(2)
-    if c1.button("가상 데이터 (wide)", key="demo_load", use_container_width=True,
+    if c1.button("가상 데이터 (wide)", key="demo_load", **theme.WIDE,
                  help="한 행이 한 시점. 가장 흔한 형태입니다."):
         _load_demo("demo_timeseries.csv", "가상 데이터 (wide)")
-    if c2.button("가상 데이터 (long)", key="demo_load_long", use_container_width=True,
+    if c2.button("가상 데이터 (long)", key="demo_load_long", **theme.WIDE,
                  help="한 행이 '한 시점의 한 태그'. PI · IP.21 같은 히스토리언 "
                       "형태입니다. pivot 화면을 확인하실 수 있습니다."):
         _load_demo("demo_timeseries_long.csv", "가상 데이터 (long)")
@@ -312,7 +312,7 @@ def _layout_panel() -> bool:
                        "그대로 진행하시면 됩니다.")
         else:
             st.info("wide 로 진행합니다.")
-        st.dataframe(raw.head(5), use_container_width=True)
+        st.dataframe(raw.head(5), **theme.WIDE)
         return True
 
     # ── 세로형 ────────────────────────────────────────────
@@ -350,7 +350,7 @@ def _layout_panel() -> bool:
     st.markdown(f"**태그 {len(inv):,}개**")
     st.caption("pivot 하면 각 태그가 컬럼 하나가 됩니다. 행 수가 유독 적은 태그는 "
                "일부 기간에만 계측된 것이라 결측이 많아집니다.")
-    st.dataframe(inv, use_container_width=True, hide_index=True, height=240,
+    st.dataframe(inv, **theme.WIDE, hide_index=True, height=240,
                  column_config={
                      "줄 수": st.column_config.NumberColumn("행 수", format="%d"),
                      "숫자로 읽힌 비율": st.column_config.NumberColumn(
@@ -392,7 +392,7 @@ def _layout_panel() -> bool:
         st.rerun()
 
     st.caption("pivot 전 미리보기 (앞 5행)")
-    st.dataframe(raw.head(5), use_container_width=True)
+    st.dataframe(raw.head(5), **theme.WIDE)
     return False
 
 
@@ -434,7 +434,7 @@ def _timeseries_panel() -> None:
         except Exception as e:  # noqa: BLE001
             st.error(f"변환 실패 — {e}")
 
-    st.dataframe(raw.head(50), use_container_width=True, height=240)
+    st.dataframe(raw.head(50), **theme.WIDE, height=240)
 
     if S.df is None:
         return
@@ -513,7 +513,7 @@ def _auto_panel() -> None:
         st.warning(f"{n_rows:,}행에 전체 모델을 돌리면 몇 분 동안 화면이 멈춘 것처럼 "
                    "보입니다. 진행 표시가 올라가면 도는 중입니다.")
 
-    if st.button("전체 자동 실행", type="primary", use_container_width=True):
+    if st.button("전체 자동 실행", type="primary", **theme.WIDE):
         bar, label = st.progress(0.0), st.empty()
 
         def tick(i, total, msg):
@@ -552,7 +552,7 @@ def _auto_panel() -> None:
         st.markdown("**자동으로 정해진 것들**")
         st.caption("자동으로 돌렸어도 무엇이 어떻게 결정됐는지 되짚을 수 있어야 합니다. "
                    "바꾸고 싶은 항목이 있으면 Guided 나 Expert 모드로 그 단계만 다시 하세요.")
-        st.dataframe(S.auto_decisions, use_container_width=True, hide_index=True)
+        st.dataframe(S.auto_decisions, **theme.WIDE, hide_index=True)
         st.info("5단계 예측 · 6단계 SHAP · 8단계 진단으로 바로 넘어가실 수 있습니다.")
 
 

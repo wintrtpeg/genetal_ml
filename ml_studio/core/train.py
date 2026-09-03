@@ -260,16 +260,36 @@ def train_all(
     if not names:
         raise ValueError("학습할 모델이 선택되지 않았습니다.")
 
-    if progress is not None:
-        results = []
-        for i, n in enumerate(names, start=1):
-            progress(i, len(names), n)
-            results.append(_fit_one(n, zoo[n], preprocessor, X_tr, y_tr, X_te, y_te, cv, cfg))
+    jobs = (delayed(_fit_one)(n, zoo[n], preprocessor, X_tr, y_tr, X_te, y_te, cv, cfg)
+            for n in names)
+
+    if progress is None:
+        results = list(Parallel(n_jobs=cfg.n_jobs, backend="loky")(jobs))
     else:
-        results = Parallel(n_jobs=cfg.n_jobs, backend="loky")(
-            delayed(_fit_one)(n, zoo[n], preprocessor, X_tr, y_tr, X_te, y_te, cv, cfg)
-            for n in names
-        )
+        # **진행상황을 보여 준다고 병렬을 포기하지 않는다.**
+        #
+        # 예전에는 progress 가 오면 통째로 순차 실행했다. 그런데 화면의
+        # [진행상황 표시] 는 기본이 켜짐이라, 기본 경로가 곧 순차였다. 바로
+        # 옆에 있는 [병렬 · 전체 코어] 를 골라 놔도 조용히 무시됐다 — 붙어
+        # 있는 두 설정 중 하나가 다른 하나를 지우는데 그 사실은 도움말
+        # 한 줄에만 있었다. 8코어에서 모델 열 개면 몇 배가 그냥 날아간다.
+        #
+        # joblib 1.3 부터 결과를 제너레이터로 받을 수 있다. 끝나는 대로 하나씩
+        # 꺼내 쓰면 병렬로 돌리면서도 진행상황을 알릴 수 있다.
+        results = []
+        try:
+            stream = Parallel(n_jobs=cfg.n_jobs, backend="loky",
+                              return_as="generator")(jobs)
+        except TypeError:
+            # joblib 이 return_as 를 모르는 구버전. 순차로 물러선다.
+            for i, n in enumerate(names, start=1):
+                results.append(
+                    _fit_one(n, zoo[n], preprocessor, X_tr, y_tr, X_te, y_te, cv, cfg))
+                progress(i, len(names), n)
+        else:
+            for i, r in enumerate(stream, start=1):
+                results.append(r)
+                progress(i, len(names), r["model"])
 
     detail = {r["model"]: r for r in results}
     board = pd.DataFrame([{k: v for k, v in r.items() if not k.startswith("_")} for r in results])

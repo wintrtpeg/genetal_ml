@@ -117,7 +117,7 @@ def _scenario(pipe) -> None:
         if not outside.empty:
             st.warning("학습 데이터에 없던 범위입니다. 모델이 본 적 없는 조건이므로 "
                        "예측값의 신뢰도가 떨어집니다.")
-        st.dataframe(flags, use_container_width=True, hide_index=True)
+        st.dataframe(flags, **theme.WIDE, hide_index=True)
 
     if st.button("시나리오 실행", type="primary"):
         with st.spinner("계산 중"):
@@ -132,9 +132,9 @@ def _scenario(pipe) -> None:
     for c, (k, v) in zip(cols, summary.items()):
         c.metric(k, "—" if pd.isna(v) else f"{v:,.4g}")
 
-    st.plotly_chart(plots.whatif_compare(res), use_container_width=True)
+    st.plotly_chart(plots.whatif_compare(res), **theme.WIDE)
     with st.expander("시점별 결과"):
-        st.dataframe(res, use_container_width=True, height=320)
+        st.dataframe(res, **theme.WIDE, height=320)
         theme.csv_download("CSV 내려받기", res, "whatif.csv", "whatif")
 
 
@@ -160,11 +160,11 @@ def _sweep(pipe) -> None:
         with st.spinner("계산 중"):
             curve = whatif.sweep(pipe, Xs, f, values)
             ice = whatif.ice_curves(pipe, Xs, f, values, n_lines=30) if show_ice else None
-        st.plotly_chart(plots.pdp_curve(curve, f, ice), use_container_width=True)
+        st.plotly_chart(plots.pdp_curve(curve, f, ice), **theme.WIDE)
 
         d = curve["prediction"]
         c1, c2, c3 = st.columns(3)
         c1.metric("반응 폭", f"{d.max() - d.min():,.4g}")
         c2.metric("최대 지점", f"{curve.loc[d.idxmax(), f]:,.4g}")
         c3.metric("최소 지점", f"{curve.loc[d.idxmin(), f]:,.4g}")
-        st.dataframe(curve, use_container_width=True, hide_index=True, height=280)
+        st.dataframe(curve, **theme.WIDE, hide_index=True, height=280)

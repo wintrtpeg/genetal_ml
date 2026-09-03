@@ -62,12 +62,12 @@ def render() -> None:
     st.header("기여도 순위")
     c1, c2 = st.columns([3, 2])
     with c1:
-        st.plotly_chart(plots.shap_importance_bar(imp), use_container_width=True)
+        st.plotly_chart(plots.shap_importance_bar(imp), **theme.WIDE)
     with c2:
         st.markdown("**선택 기간 기준**")
         st.dataframe(
             imp[["feature", "mean_abs_shap", "contribution_pct"]],
-            use_container_width=True, hide_index=True, height=440,
+            **theme.WIDE, hide_index=True, height=440,
             column_config={
                 "feature": "피처",
                 "mean_abs_shap": st.column_config.NumberColumn("mean |SHAP|", format="%.4g"),
@@ -84,7 +84,7 @@ def render() -> None:
     st.plotly_chart(
         plots.shap_contribution_stream(view["values"], top_n=6,
                                        freq=None if freq == "원본" else freq),
-        use_container_width=True)
+        **theme.WIDE)
 
     st.header("특정 시점 분해")
     _local(view)
@@ -238,7 +238,7 @@ def _dependence(res: dict, view: dict, imp: pd.DataFrame, label: str, lo, hi) ->
                 dep = explain.dependence_data(view, f, i)
                 st.plotly_chart(
                     plots.shap_dependence(dep, f, i, color_mode=cmode, subtitle=label),
-                    use_container_width=True)
+                    **theme.WIDE)
             except Exception as e:  # noqa: BLE001
                 st.caption(f"{f} — 그리지 못했습니다: {e}")
         return
@@ -273,7 +273,7 @@ def _compare(res: dict, features: list[str], lo, hi) -> None:
         st.warning(str(e))
         return
 
-    st.plotly_chart(plots.shap_period_shift(shift, labels), use_container_width=True)
+    st.plotly_chart(plots.shap_period_shift(shift, labels), **theme.WIDE)
     if "변화" in shift.columns and len(shift):
         top = shift.iloc[0]
         direction = "커졌습니다" if top["변화"] > 0 else "작아졌습니다"
@@ -288,7 +288,7 @@ def _compare(res: dict, features: list[str], lo, hi) -> None:
         try:
             dep = explain.dependence_by_periods(res, f, periods)
             st.plotly_chart(plots.shap_dependence(dep, f, None, color_mode="period"),
-                            use_container_width=True)
+                            **theme.WIDE)
         except Exception as e:  # noqa: BLE001
             st.caption(f"{f} — 그리지 못했습니다: {e}")
 
@@ -317,7 +317,7 @@ def _local(view: dict) -> None:
         pass
 
     st.plotly_chart(plots.local_waterfall(local, view["base_value"], pred),
-                    use_container_width=True)
+                    **theme.WIDE)
 
     if S.y is not None and ts in S.y.index:
         c1, c2 = st.columns(2)
@@ -332,6 +332,6 @@ def _fallback(pipe, X) -> None:
     try:
         y = S.y.reindex(X.index)
         imp = explain.permutation_importance_fallback(pipe, X, y, n_repeats=3)
-        st.dataframe(imp.head(25), use_container_width=True, hide_index=True)
+        st.dataframe(imp.head(25), **theme.WIDE, hide_index=True)
     except Exception as e:  # noqa: BLE001
         st.error(f"대체 계산도 실패했습니다 — {e}")

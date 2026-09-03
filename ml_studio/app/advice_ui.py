@@ -26,6 +26,8 @@ from typing import Any, Callable
 
 import streamlit as st
 
+from app import theme
+
 from core.advisor import Advice
 
 
@@ -78,7 +80,7 @@ def why(advice: Advice, label: str = "근거 보기", *,
         with st.expander(label, expanded=False):
             if detail_caption:
                 st.caption(detail_caption)
-            st.dataframe(advice.detail, use_container_width=True,
+            st.dataframe(advice.detail, **theme.WIDE,
                          hide_index=True, height=min(320, 40 + 28 * len(advice.detail)))
 
 
@@ -110,7 +112,7 @@ def summary(table, caption: str = "") -> None:
         return
     if caption:
         st.caption(caption)
-    st.dataframe(table, use_container_width=True, hide_index=True,
+    st.dataframe(table, **theme.WIDE, hide_index=True,
                  height=min(280, 40 + 34 * len(table)))
 
 

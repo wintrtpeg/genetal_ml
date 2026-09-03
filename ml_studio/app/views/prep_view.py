@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from app import advice_ui, state
+from app import advice_ui, state, theme
 from core import advisor, datasource, plots, preprocess, profiling
 
 CORR_SAMPLE_ROWS = 50_000
@@ -50,7 +50,7 @@ def render() -> None:
     st.header("컬럼별 상태")
     st.caption("각 컬럼의 자료형·결측률·분산·고유값 수입니다. "
                "이상해 보이는 태그가 있으면 아래에서 빼시면 됩니다.")
-    st.dataframe(prof, use_container_width=True, height=320)
+    st.dataframe(prof, **theme.WIDE, height=320)
 
     c1, c2 = st.columns([3, 2])
     with c1:
@@ -58,13 +58,13 @@ def render() -> None:
         if suggested.empty:
             st.success("규칙에 걸리는 컬럼이 없습니다.")
         else:
-            st.dataframe(suggested, use_container_width=True, hide_index=True)
+            st.dataframe(suggested, **theme.WIDE, hide_index=True)
     with c2:
         st.subheader("중복 후보 (상관 높은 쌍)")
         if pairs.empty:
             st.caption(f"상관 {rule.max_corr} 이상인 쌍이 없습니다.")
         else:
-            st.dataframe(pairs, use_container_width=True, hide_index=True, height=240)
+            st.dataframe(pairs, **theme.WIDE, hide_index=True, height=240)
         if len(df) > CORR_SAMPLE_ROWS:
             st.caption(f"데이터가 많아 {CORR_SAMPLE_ROWS:,}줄만 골라 비교했습니다. "
                        "제안용 수치이고, 학습에는 전체를 씁니다.")
@@ -90,13 +90,13 @@ def render() -> None:
             st.caption("끊긴 구간이 없습니다.")
         else:
             st.caption(f"{len(gaps)}개 구간에서 기록이 끊겼습니다.")
-            st.dataframe(gaps, use_container_width=True, hide_index=True, height=200)
+            st.dataframe(gaps, **theme.WIDE, hide_index=True, height=200)
 
     with st.expander("결측 분포"):
         if kept:
             try:
                 st.plotly_chart(plots.missing_heat(df[kept]),
-                                use_container_width=True)
+                                **theme.WIDE)
             except Exception as e:  # noqa: BLE001
                 st.caption(f"차트를 그리지 못했습니다 — {e}")
 

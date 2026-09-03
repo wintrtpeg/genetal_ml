@@ -72,22 +72,22 @@ def render() -> None:
     st.plotly_chart(
         plots.actual_vs_pred(res["actual"], res["predicted"], train_end=valid_start,
                              title=f"{S.target} — 실측 대비 예측", ylabel=S.target),
-        use_container_width=True)
+        **theme.WIDE)
 
     c1, c2 = st.columns([3, 2])
     with c1:
         st.plotly_chart(plots.residual_series(res["actual"], res["predicted"]),
-                        use_container_width=True)
+                        **theme.WIDE)
     with c2:
         st.plotly_chart(plots.scatter_actual_pred(res["actual"], res["predicted"]),
-                        use_container_width=True)
+                        **theme.WIDE)
 
     st.divider()
     _residual_diagnostics(res)
 
     with st.expander("예측값 표"):
         st.dataframe(res.assign(residual=res["actual"] - res["predicted"]),
-                     use_container_width=True, height=340)
+                     **theme.WIDE, height=340)
         theme.csv_download("CSV 내려받기", res, f"predictions_{S.target}.csv", "predict")
 
 
@@ -125,7 +125,7 @@ def _residual_diagnostics(res: pd.DataFrame) -> None:
 
     out = diagnostics.outliers(r, cfg)
     st.plotly_chart(plots.residual_band(diagnostics.rolling_stats(r, cfg), out),
-                    use_container_width=True)
+                    **theme.WIDE)
 
     drift = diagnostics.drift_table(r, cfg)
     if not drift.empty:
@@ -133,23 +133,23 @@ def _residual_diagnostics(res: pd.DataFrame) -> None:
         (st.warning if verdict["drift"] else st.info)(verdict["message"])
         c1, c2 = st.columns([3, 2])
         with c1:
-            st.plotly_chart(plots.residual_drift(drift), use_container_width=True)
+            st.plotly_chart(plots.residual_drift(drift), **theme.WIDE)
         with c2:
             st.dataframe(drift[["구간", "행수", "mean", "std", "MAE", "MAE_배율"]].round(4),
-                         use_container_width=True, hide_index=True, height=300)
+                         **theme.WIDE, hide_index=True, height=300)
 
     acf = diagnostics.autocorrelation(r, cfg)
     c1, c2 = st.columns([3, 2])
     with c1:
         if not acf.empty:
-            st.plotly_chart(plots.residual_acf(acf, len(r)), use_container_width=True)
+            st.plotly_chart(plots.residual_acf(acf, len(r)), **theme.WIDE)
     with c2:
         st.markdown(f"**이상점 {len(out):,}건**")
         st.caption("중앙값·MAD 기준입니다. 평균을 쓰면 이상점이 스스로를 정상으로 만듭니다.")
         if out.empty:
             st.info("기준을 넘는 이상점이 없습니다.")
         else:
-            st.dataframe(out.head(200), use_container_width=True, height=300)
+            st.dataframe(out.head(200), **theme.WIDE, height=300)
 
 
 def _metrics(res: pd.DataFrame, valid_start, unseen_start=None) -> None:

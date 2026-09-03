@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from app import state
+from app import state, theme
 
 # 단계별 한 줄 설명과, 다음으로 넘어가기 위한 조건
 GUIDE: dict[str, str] = {
@@ -106,14 +106,14 @@ def footer(key: str) -> None:
 
     if i > 0:
         prev = steps[i - 1]
-        if c1.button(f"← {labels[prev]}", use_container_width=True, key=f"nav_prev_{key}"):
+        if c1.button(f"← {labels[prev]}", **theme.WIDE, key=f"nav_prev_{key}"):
             _go(prev)
 
     if i < len(steps) - 1:
         nxt = steps[i + 1]
         blocker = _blocker(key)
         ok = blocker is None and state.ready(nxt)
-        if c2.button(f"{labels[nxt]} →", type="primary", use_container_width=True,
+        if c2.button(f"{labels[nxt]} →", type="primary", **theme.WIDE,
                      disabled=not ok, key=f"nav_next_{key}"):
             _go(nxt)
         if not ok:

@@ -9,7 +9,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from app import state
+from app import state, theme
 from core import diagnostics, features, models, plots, preprocess, train, validation
 
 
@@ -47,7 +47,7 @@ def _leakage_panel() -> None:
         return
 
     st.markdown("**구간 분할**")
-    st.dataframe(S.split.describe(S.X.index), use_container_width=True, hide_index=True)
+    st.dataframe(S.split.describe(S.X.index), **theme.WIDE, hide_index=True)
 
     lookback = (features.warmup_rows(S.feature_config, S.X.index)
                 if S.feature_config else 0)
@@ -60,7 +60,7 @@ def _leakage_panel() -> None:
     (st.error if failed else st.success)(
         f"{failed}개 항목이 실패했습니다." if failed else
         f"{len(check)}개 항목 전부 통과했습니다.")
-    st.dataframe(check, use_container_width=True, hide_index=True)
+    st.dataframe(check, **theme.WIDE, hide_index=True)
 
     if S.unseen_guard is not None:
         st.caption(f"Final Unseen 접근 {S.unseen_guard.access_count}회 "
@@ -75,7 +75,7 @@ def _leakage_panel() -> None:
                     validation.audit_splits(S.X.index,
                                             validation.make_cv(S.split_config),
                                             len(S.train_idx)),
-                    use_container_width=True, hide_index=True)
+                    **theme.WIDE, hide_index=True)
             except validation.LeakageError as e:
                 st.error(str(e))
 
@@ -97,13 +97,13 @@ def _stability_panel() -> None:
     if worst < 0.5:
         st.warning(f"가장 낮은 Jaccard 가 {worst:.3f} 입니다. 폴드마다 다른 피처를 고르고 "
                    "있으므로, 폴드 밖에서 한 번만 선별했다면 CV 점수가 낙관 편향됐을 조건입니다.")
-    st.dataframe(tbl, use_container_width=True, hide_index=True)
+    st.dataframe(tbl, **theme.WIDE, hide_index=True)
 
     pick = st.selectbox("모델별 폴드 상세", list(tbl["model"]))
     rec = S.detail.get(pick, {})
     jt = rec.get("_fold_jaccard_table")
     if jt is not None and not jt.empty:
-        st.dataframe(jt, use_container_width=True, hide_index=True)
+        st.dataframe(jt, **theme.WIDE, hide_index=True)
     sets = rec.get("_fold_feature_sets")
     if sets:
         with st.expander("폴드별 선택 피처"):
@@ -138,14 +138,14 @@ def _residual_panel() -> None:
     if not drift.empty:
         v = diagnostics.drift_verdict(drift)
         (st.warning if v["drift"] else st.info)(v["message"])
-        st.plotly_chart(plots.residual_drift(drift), use_container_width=True)
+        st.plotly_chart(plots.residual_drift(drift), **theme.WIDE)
 
     st.plotly_chart(plots.residual_band(diagnostics.rolling_stats(r, cfg),
                                         diagnostics.outliers(r, cfg)),
-                    use_container_width=True)
+                    **theme.WIDE)
     acf = diagnostics.autocorrelation(r, cfg)
     if not acf.empty:
-        st.plotly_chart(plots.residual_acf(acf, len(r)), use_container_width=True)
+        st.plotly_chart(plots.residual_acf(acf, len(r)), **theme.WIDE)
 
 
 def _backtest_panel(metric: str, zoo: dict) -> None:
@@ -206,11 +206,11 @@ def _backtest_panel(metric: str, zoo: dict) -> None:
                        help=f"{pd.Timestamp(summ['최악시작']):%Y-%m-%d} 시작")
 
     st.caption(f"대상 **{bt['model']}**")
-    st.plotly_chart(plots.backtest_series(table, metric), use_container_width=True)
+    st.plotly_chart(plots.backtest_series(table, metric), **theme.WIDE)
     show = [c for c in ("구간", "학습", "평가시작", "평가끝", "n_train", "n_test",
                         metric, "RMSE", "MAE", "fit_seconds", "status")
             if c in table.columns]
-    st.dataframe(table[show], use_container_width=True, hide_index=True, height=280)
+    st.dataframe(table[show], **theme.WIDE, hide_index=True, height=280)
 
 
 def _split_diagnosis_panel(metric: str, zoo: dict) -> None:
@@ -269,13 +269,13 @@ def _split_diagnosis_panel(metric: str, zoo: dict) -> None:
     m = diag["metric"]
     cols = ["model", f"time_{m}", f"random_{m}", "격차"]
     st.dataframe(diag["table"][[c for c in cols if c in diag["table"].columns]],
-                 use_container_width=True, hide_index=True)
+                 **theme.WIDE, hide_index=True)
 
     if v["significant"]:
         st.warning(f"격차가 임계({v['threshold']:.2f})를 넘습니다. "
                    "Time 쪽 숫자만 실제 성능으로 보세요.")
         st.markdown("**원인 후보**")
-        st.dataframe(pd.DataFrame(v["causes"]), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(v["causes"]), **theme.WIDE, hide_index=True)
     else:
         st.info(f"격차가 임계({v['threshold']:.2f}) 안입니다. "
                 "시간 의존이 강하지 않은 데이터로 보입니다.")

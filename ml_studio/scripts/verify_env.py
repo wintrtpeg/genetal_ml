@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import sys
 import traceback
 from pathlib import Path
@@ -91,12 +92,48 @@ def _install_hint(name: str) -> str:
     return ""
 
 
-def check(name: str, fn) -> None:
-    """하나 돌려 보고 결과를 모은다. 하나가 죽어도 나머지는 계속 본다."""
+def _installed(mod: str) -> bool:
+    """설치돼 있는가. import 까지는 하지 않는다 — 무거운 것이 섞여 있다."""
+    try:
+        return importlib.util.find_spec(mod) is not None
+    except (ImportError, ValueError):
+        return False
+
+
+def check(name: str, fn, needs: str | tuple[str, ...] = ()) -> None:
+    """하나 돌려 보고 결과를 모은다. 하나가 죽어도 나머지는 계속 본다.
+
+    needs : 이 검사가 반드시 필요로 하는 **최상위 모듈 이름**.
+
+    이게 왜 필요한가 — 예외 종류만 보고 "라이브러리가 없다" 고 판정하면,
+    **깔려 있는데 깨진 것**을 "설치 안 됨" 으로 돌려보낸다. 그러면 안내가
+    "pip install 하세요" 로 나가고, 사용자가 그대로 치면 pip 은 "already
+    satisfied" 라고 답한다. 다시 점검해도 같은 자리다 — 빠져나올 수 없다.
+
+    실제로 그렇게 됐다. pysqream-sqlalchemy 가 구버전(0.6)으로 깔리면 엔진을
+    만들 때 `No module named 'dbapi'` 를 던지는데, 이게 ModuleNotFoundError 라
+    "안 깔렸다" 로 분류됐다. 깔려 있었는데도.
+
+    그래서 요구 모듈이 실제로 있는지를 **먼저** 본다. 있는데도 터졌다면 그건
+    건너뛸 일이 아니라 **고쳐야 할 결함**이다.
+    """
+    want = (needs,) if isinstance(needs, str) else tuple(needs)
     try:
         fn()
     except Exception as e:  # noqa: BLE001
-        if _is_missing_library(e):
+        absent = [m for m in want if not _installed(m)]
+        if absent:
+            SKIP.append((name, str(e)))
+            print(f"  건너뜀  {name}  ({e})")
+        elif want:
+            # 요구 모듈은 전부 깔려 있는데 터졌다 → 버전 조합 문제다.
+            detail = (f"{type(e).__name__}: {e}  "
+                      f"[{', '.join(want)} 는 설치돼 있습니다 — 버전 조합 문제로 보입니다]")
+            FAIL.append((name, detail, traceback.format_exc()))
+            print(f"  실패    {name}\n          {type(e).__name__}: {e}")
+            print(f"          {', '.join(want)} 는 설치돼 있습니다. "
+                  f"버전이 맞지 않아 못 쓰는 상태입니다.")
+        elif _is_missing_library(e):
             SKIP.append((name, str(e)))
             print(f"  건너뜀  {name}  ({e})")
         else:
@@ -395,7 +432,8 @@ def _sql() -> None:
                                  connect_args=d.DEFAULT_CONNECT_ARGS["sqream"])
         src._engine()
         print("          드라이버 로드 성공 (접속은 하지 않았습니다)")
-    check("SQL · SQream 드라이버 로드", _engine_builds)
+    check("SQL · SQream 드라이버 로드", _engine_builds,
+          needs="pysqream_sqlalchemy")
 
     def _guard():
         for bad in ("DROP TABLE t", "SELECT 1; DELETE FROM t", "UPDATE t SET a=1"):

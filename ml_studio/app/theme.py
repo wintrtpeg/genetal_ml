@@ -17,6 +17,8 @@
 
 from __future__ import annotations
 
+import inspect
+
 import streamlit as st
 
 # ── 디자인 토큰 ──────────────────────────────────────────────────────────
@@ -108,6 +110,10 @@ CSS = f"""
   .rb-v.dim {{ color: #9AA7B6; font-weight: 480; }}
   .rb-item.flag {{ margin-left: auto; border-right: none;
                    border-left: 1px solid var(--rule-soft); background: var(--panel2); }}
+  /* 누수 가드는 margin-left:auto 로 오른쪽 끝에 붙는다. 그러면 그 앞 칸의
+     오른쪽 괘선과 가드 칸의 왼쪽 괘선 사이에 빈 공간이 생겨, 값이 안 채워진
+     빈 칸이 하나 있는 것처럼 보인다. 앞 칸의 괘선을 지워 선을 하나만 남긴다. */
+  .rb-item:has(+ .flag) {{ border-right: none; }}
 
   .badge {{ display: inline-block; font-size: 0.735rem; font-weight: 600;
             padding: 0.14rem 0.5rem; border-radius: 2px; line-height: 1.5; }}
@@ -252,6 +258,29 @@ CSS = f"""
              margin-right: 0.4rem; vertical-align: middle; }}
 </style>
 """
+
+
+# ── 폭 지정 — streamlit 버전 호환 ────────────────────────────────────────
+# streamlit 이 `use_container_width` 를 `width` 로 바꾸면서 **"2025-12-31 이후
+# 제거"** 를 예고했다. 예고한 날짜는 이미 지났다. 지워지는 순간 이 도구는
+# 화면 한 장도 못 띄운다 — 표·차트·버튼 100군데가 전부 그 인자를 쓴다.
+#
+# 그렇다고 `width` 로 그냥 갈아타면 구버전에서 깨진다. 옛 streamlit 에도
+# `width` 라는 인자가 있었지만 **픽셀 정수**였다. 이름만 보고 판단하면
+# `width="stretch"` 를 정수 자리에 넣는 셈이라 조용히 다르게 그려진다.
+#
+# 그래서 이름이 아니라 **기본값의 타입**으로 가른다. 새 API 는 기본값이
+# "stretch"·"content" 라는 문자열이고, 옛 API 는 None 이다. 판정은 import 할 때
+# 한 번만 하고, 화면 쪽은 `**theme.WIDE` 한 가지만 쓴다.
+def _wide_kwargs() -> dict:
+    try:
+        default = inspect.signature(st.dataframe).parameters["width"].default
+    except (AttributeError, KeyError, TypeError, ValueError):
+        return {"use_container_width": True}
+    return {"width": "stretch"} if isinstance(default, str) else {"use_container_width": True}
+
+
+WIDE = _wide_kwargs()
 
 
 def inject() -> None:

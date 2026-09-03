@@ -97,15 +97,15 @@ def _rail() -> str:
         if S.get("_reset_armed"):
             st.warning("데이터·피처 선별·학습 결과가 모두 지워집니다.")
             c1, c2 = st.columns(2)
-            if c1.button("지웁니다", type="primary", use_container_width=True):
+            if c1.button("지웁니다", type="primary", **theme.WIDE):
                 for k, v in state.DEFAULTS.items():
                     S[k] = v
                 S["_reset_armed"] = False
                 st.rerun()
-            if c2.button("취소", use_container_width=True):
+            if c2.button("취소", **theme.WIDE):
                 S["_reset_armed"] = False
                 st.rerun()
-        elif st.button("전체 초기화", use_container_width=True):
+        elif st.button("전체 초기화", **theme.WIDE):
             S["_reset_armed"] = True
             st.rerun()
 

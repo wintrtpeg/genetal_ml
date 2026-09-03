@@ -1083,6 +1083,60 @@ def test_verify_env_tells_you_how_to_install_what_it_skipped():
     assert verify_env._install_hint("시간축 정리") == ""      # 라이브러리 문제가 아닌 것
 
 
+def test_installed_but_broken_library_is_a_failure_not_a_skip():
+    """**깔려 있는데 못 쓰는 것**을 "설치 안 됨" 으로 돌려보내면 안 된다.
+
+    실제로 그렇게 됐다. pysqream-sqlalchemy 가 구버전(0.6)으로 깔리면 엔진을
+    만들 때 `No module named 'dbapi'` 를 던진다. 이게 ModuleNotFoundError 라
+    "라이브러리가 없다" 로 분류됐고, 안내는 "pip install pysqream-sqlalchemy"
+    로 나갔다. 사용자가 그대로 치면 pip 은 "already satisfied" 라고 답한다.
+    다시 점검해도 같은 자리다 — **빠져나올 수 없는 안내**였다.
+
+    그래서 요구 모듈이 실제로 깔려 있는지를 먼저 보고, 깔려 있는데도 터지면
+    건너뜀이 아니라 결함으로 센다.
+    """
+    from scripts import verify_env
+
+    def _boom():
+        raise ModuleNotFoundError("No module named 'dbapi'")
+
+    keep = (list(verify_env.PASS), list(verify_env.FAIL), list(verify_env.SKIP))
+    try:
+        verify_env.PASS.clear(); verify_env.FAIL.clear(); verify_env.SKIP.clear()
+
+        # 깔려 있는 모듈을 요구하면서 터진다 → 결함
+        verify_env.check("설치돼 있는데 터짐", _boom, needs="sys")
+        assert len(verify_env.FAIL) == 1, "깔려 있는데 터진 것을 건너뛰었습니다"
+        assert not verify_env.SKIP
+        assert "설치돼 있습니다" in verify_env.FAIL[0][1]
+
+        verify_env.FAIL.clear()
+
+        # 정말 없는 모듈을 요구하면서 터진다 → 건너뜀
+        verify_env.check("진짜 없음", _boom,
+                         needs="_a_module_that_is_not_installed_")
+        assert len(verify_env.SKIP) == 1, "없는 라이브러리를 결함으로 셌습니다"
+        assert not verify_env.FAIL
+
+        verify_env.SKIP.clear()
+
+        # needs 를 안 주면 예전 판정 그대로 (다른 검사들이 이 경로를 쓴다)
+        verify_env.check("예전 판정", _boom)
+        assert len(verify_env.SKIP) == 1 and not verify_env.FAIL
+    finally:
+        for target, saved in zip((verify_env.PASS, verify_env.FAIL, verify_env.SKIP), keep):
+            target.clear(); target.extend(saved)
+
+
+def test_sqream_driver_check_declares_what_it_needs():
+    """SQream 검사가 needs 를 달고 있어야 위 판정이 실제로 걸린다."""
+    src = (SCRIPTS / "verify_env.py").read_text(encoding="utf-8")
+    i = src.index("SQL · SQream 드라이버 로드")
+    assert "needs=" in src[i:i + 200], (
+        "SQream 드라이버 검사에 needs= 가 없습니다 — 깨진 드라이버가 다시 "
+        "'설치 안 됨' 으로 잘못 안내됩니다")
+
+
 def test_stale_stamp_does_not_take_the_fast_path(monkeypatch):
     """예전 도장이 남아 있으면 빠른 경로로 가면 안 된다 — 실제 _ready() 로 확인.
 
@@ -1174,3 +1228,75 @@ def test_every_plan_method_is_handled_by_compute_shap():
     for m in ("blend", "tree", "linear"):
         assert f"'{m}'" in body or f'"{m}"' in body, f"_explain 이 {m} 을 안 봅니다"
     assert hasattr(explain, "_explain_blend")
+
+
+# ── 6. streamlit 이 없앤 인자 ────────────────────────────────
+# plotly 의 titlefont 와 같은 부류다. streamlit 은 `use_container_width` 를
+# `width` 로 바꾸면서 **"2025-12-31 이후 제거"** 를 예고했다. 예고한 날짜는 이미
+# 지났다. 지워지는 순간 표·차트·버튼이 전부 TypeError 로 죽는다 — 화면 한 장도
+# 안 뜬다. 그래서 소스에 그 인자가 다시 기어들어오지 못하게 막는다.
+def test_no_removed_streamlit_width_argument():
+    bad = []
+    for f in _py_files(APP, VIEWS):
+        if f.name == "theme.py":
+            continue          # 호환 판정이 사는 곳. 문자열로만 등장한다
+        for i, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
+            code = line.split("#", 1)[0]
+            if re.search(r"\buse_container_width\s*=", code):
+                bad.append(f"{f.name}:{i}  {code.strip()}")
+    assert not bad, (
+        "streamlit 이 제거를 예고한 인자입니다 (2025-12-31). "
+        "`**theme.WIDE` 를 쓰세요:\n" + "\n".join(bad))
+
+
+def test_theme_wide_matches_installed_streamlit():
+    """theme.WIDE 가 지금 깔린 streamlit 이 받는 인자를 골랐는가.
+
+    이름이 아니라 **기본값의 타입**으로 갈라야 한다. 옛 streamlit 에도 `width`
+    라는 인자가 있었지만 픽셀 정수였다. 이름만 보고 판단하면 "stretch" 를 정수
+    자리에 넣는 셈이라 조용히 다르게 그려진다.
+    """
+    import inspect
+
+    import streamlit as st
+
+    from app import theme
+
+    assert len(theme.WIDE) == 1
+    key = next(iter(theme.WIDE))
+    assert key in ("width", "use_container_width")
+
+    default = inspect.signature(st.dataframe).parameters["width"].default
+    if isinstance(default, str):
+        assert theme.WIDE == {"width": "stretch"}, theme.WIDE
+    else:
+        assert theme.WIDE == {"use_container_width": True}, theme.WIDE
+
+    # 고른 인자를 실제 위젯들이 받는지까지 본다 — 표·차트·버튼 세 갈래다.
+    for fn in (st.dataframe, st.plotly_chart, st.button, st.download_button):
+        assert key in inspect.signature(fn).parameters, (
+            f"{fn.__name__} 이 {key} 를 받지 않습니다")
+
+
+def test_theme_wide_falls_back_when_width_is_pixels():
+    """구버전 streamlit(폭이 픽셀 정수) 에서는 옛 인자로 물러서야 한다."""
+    import inspect
+
+    from app import theme
+
+    class _OldDataFrame:
+        def __call__(self, data, width=None, height=None,
+                     use_container_width=False):
+            ...
+
+    old = _OldDataFrame()
+    assert inspect.signature(old.__call__).parameters["width"].default is None
+
+    # _wide_kwargs 는 st.dataframe 을 본다. 그 자리를 잠깐 구버전으로 바꿔 둔다.
+    import streamlit as st
+    keep = st.dataframe
+    try:
+        st.dataframe = old.__call__
+        assert theme._wide_kwargs() == {"use_container_width": True}
+    finally:
+        st.dataframe = keep
