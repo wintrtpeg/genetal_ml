@@ -1,0 +1,12 @@
+# 전체 설치용. 한 번에 다 깔고 싶을 때 씁니다.
+#
+#   pip install -r requirements.txt
+#
+# 부스팅 3종·SHAP 설치가 막히는 환경(사내 PC, 폐쇄망, 윈도우 빌드도구 부재)이면
+# 아래 두 줄로 나눠서 하세요. core 만으로도 전 단계가 끝까지 돕니다.
+#
+#   pip install -r requirements-core.txt     # 반드시 성공해야 함
+#   pip install -r requirements-extra.txt    # 실패해도 무방
+
+-r requirements-core.txt
+-r requirements-extra.txt
