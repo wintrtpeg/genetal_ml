@@ -1,0 +1,26 @@
+[theme]
+base = "light"
+primaryColor = "#0B4F8C"
+backgroundColor = "#EDF0F4"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#0E1620"
+font = "sans serif"
+
+[server]
+maxUploadSize = 1024
+headless = true
+
+[browser]
+gatherUsageStats = false
+
+[client]
+# 상단 오른쪽의 [Deploy] 버튼을 없앤다.
+#
+# 이건 streamlit 이 자기 클라우드에 올리라고 붙여 주는 버튼이다. 이 도구는
+# 폐쇄망 사내 PC 에서 도는 로컬 분석 도구라 누를 일이 없고, 누르면 배포 안내가
+# 떠서 "내가 뭘 잘못 눌렀나" 로 이어진다. 화면 맨 위 오른쪽 — 눈이 제일 먼저
+# 가는 자리에 쓸 일 없는 버튼을 둘 이유가 없다.
+#
+# minimal 은 Deploy 만 숨기고 [Rerun]·[Settings] 같은 실제로 쓰는 항목은
+# 햄버거 메뉴에 그대로 남긴다.
+toolbarMode = "minimal"
