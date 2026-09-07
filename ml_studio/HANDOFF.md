@@ -18,14 +18,14 @@
 
 ## 2. 지금 상태 — 한 줄로
 
-**기능은 전부 구현됐고 테스트 369건이 통과합니다. 브라우저 렌더링까지
+**기능은 전부 구현됐고 테스트 379건이 통과합니다. 브라우저 렌더링까지
 확인했습니다. 남은 것은 SQream 실접속과 실데이터입니다.**
 
 | 층위 | 상태 |
 |---|---|
 | 원래 요청 12가지 | 전부 구현 |
 | 로드맵 16개 + 추가 요청 | 전부 구현 |
-| 자동 검증 | **369건 통과, 0 실패** |
+| 자동 검증 | **379건 통과, 0 실패** |
 | 화면 실행 검증 | 대역으로 10개 화면 × 상태 40여 조합 실행 |
 | **진짜 브라우저 렌더링** | **확인됨** (17차) — 아래 참조 |
 | **진짜 plotly/shap/부스팅** | **확인됨** (12차·17차) — SHAP 3경로·부스팅 3종·차트 22종 |
@@ -144,7 +144,19 @@ run.bat --full   → 설치와 점검을 다시 하고 싶을 때
 설치가 끝난 PC 에서만 확인되는 28건 — 차트 21종, SHAP 3경로, 부스팅 3종,
 SQream 엔진, HTML 리포트. `run.bat` 첫 실행에 이미 포함돼 있습니다.
 
-### 4-3. 회사 PC — SQream 실접속 + 실데이터
+### 4-3. 회사 PC — SQream 실접속 + 실데이터  ← **지금 여기**
+
+가져가는 방법은 26차에 준비했습니다.
+
+    python scripts/make_dist.py      # dist/ml_studio_YYYYMMDD.zip (1.3MB)
+
+회사 PC 에서 압축을 풀고 `run.bat` 을 누른 뒤, `connection.py` 에 접속 정보를
+적으면 SQL 화면에 쿼리창만 남습니다. 접속 정보는 배포 zip 에 담기지 않으므로
+그쪽에서 한 번 적어야 합니다.
+
+여기부터는 이 컨테이너에서 확인할 수 없는 것들입니다 — 실제 계정으로 붙어
+봐야 알 수 있습니다. 실패하면 `report.bat` 의 `diagnostic_report.txt` 를
+보내 주세요.
 
 집에서 화면 문제를 털어낸 뒤에 합니다. 순서를 바꾸면 화면 버그와 데이터 문제가
 섞여 원인 찾기가 어려워집니다.
@@ -202,14 +214,19 @@ app/           Streamlit 화면 (core 를 호출만 함)
   advice_ui    추천을 화면에 붙이는 공통 부품 (why · deviation · limits_form)
   views/       10개 화면
 
-tests/         369건
+tests/         379건
   fake_streamlit / fake_plotly   대역 — 화면을 실제로 실행하기 위한 것
   test_view_render               화면 10개 × 상태 40여 조합
   test_runtime_guards            실행 오류 · 성능 · 누수 접근권
   test_leakage / test_split_leakage   누수 방지 장치
   run_tests                      pytest 없이도 도는 러너
 
+connection.py  데이터마트 접속 설정 — **사용자가 직접 고치는 유일한 파일**
+               채우면 SQL 화면에서 접속 항목이 사라지고 쿼리창만 남는다.
+               저장소에는 **비운 채로** 둔다.
+
 scripts/
+  make_dist      회사 PC 로 가져갈 배포 zip (.venv·runs·접속정보 제외)
   setup          첫 실행 (run.bat 이 부름). 두 번째부터는 launch 로 바로 감
   launch         화면 실행 + 포트 선택 + 브라우저 자동 열기
   verify_env     설치된 PC 에서만 확인되는 것들
@@ -270,7 +287,7 @@ streamlit·plotly·shap·부스팅 3종이 없었고, 그 코드는 한 번도 �
 화면까지 눌러 봤습니다 (2절 참조). 되는 환경이라면 이 순서가 가장 빠릅니다.
 
     pip install -r requirements-core.txt && pip install -r requirements-extra.txt
-    python tests/run_tests.py          # 369건
+    python tests/run_tests.py          # 379건
     python scripts/verify_env.py       # 38건 — 차트·SHAP·부스팅·SQL·리포트
     python scripts/smoke_test.py       # end-to-end
     python -m streamlit run app/main.py --server.headless true &

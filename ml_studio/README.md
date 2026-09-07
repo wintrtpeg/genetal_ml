@@ -39,7 +39,7 @@ run.bat           # Windows (더블클릭해도 됩니다)
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements-core.txt     # 반드시 성공해야 합니다
 pip install -r requirements-extra.txt    # 실패해도 무방합니다
-python tests/run_tests.py                # 369건 — 여기가 통과해야 결과를 믿을 수 있습니다
+python tests/run_tests.py                # 379건 — 여기가 통과해야 결과를 믿을 수 있습니다
 python scripts/verify_env.py             # 이 PC 에서만 확인되는 것들 (차트·SHAP·부스팅·SQL)
 python scripts/make_demo_data.py         # 가상 데이터 (선택)
 streamlit run app/main.py
@@ -63,6 +63,44 @@ streamlit run app/main.py
 크고 LightGBM 은 윈도우에서 재배포 패키지를 요구하는 경우가 있어, 그것 때문에 전체
 설치가 통째로 실패하는 일이 없도록 분리했습니다. SHAP 이 없으면 해석 화면이 순열
 중요도로 대체됩니다.
+
+---
+
+## 회사 PC 로 가져가기
+
+개발한 PC 에서 zip 을 하나 만들고, 그것만 옮기면 됩니다.
+
+```bash
+python scripts/make_dist.py
+```
+
+`dist/ml_studio_YYYYMMDD.zip` 이 생깁니다 (약 1.3MB). 회사 PC 에서:
+
+1. zip 을 옮겨 압축을 풉니다
+2. 폴더 안의 **`run.bat` 을 더블클릭**합니다 — 첫 실행은 3~10분 (가상환경 생성 ·
+   패키지 설치 · 회귀 테스트 · 환경 점검 · 화면 실행)
+3. 데이터마트를 쓰시면 `connection.py` 를 열어 접속 정보를 적고 `run.bat` 을 다시 실행
+
+두 번째부터는 `run.bat` 이 몇 초 만에 화면만 띄웁니다.
+
+**가상환경(`.venv`)은 zip 에 넣지 않습니다.** 2GB 가 넘는 데다, PC 가 바뀌면
+그대로는 못 씁니다 — 경로가 박혀 있고 OS·파이썬 버전도 다릅니다. 회사 PC 에서
+`run.bat` 이 그 PC 에 맞는 가상환경을 새로 만듭니다. 그래서 회사 PC 에
+**파이썬 3.10~3.12 와 pip 설치 경로(사내 프록시·미러 포함)가 필요합니다.**
+
+`runs/`(지난 실행 결과)와 `connection.py` 의 접속 정보도 빼고 넣습니다 —
+분석한 데이터의 흔적과 계정이 딸려 나가지 않도록. 내 PC 로만 옮기는 것이라
+접속 정보를 그대로 가져가려면 `--with-connection` 을 붙이세요.
+
+### 사내 프록시를 쓴다면
+
+`run.bat` 을 누르기 전에 명령창에서 한 번 지정하세요.
+
+```bat
+set HTTP_PROXY=http://프록시주소:포트
+set HTTPS_PROXY=http://프록시주소:포트
+run.bat
+```
 
 ---
 
@@ -242,7 +280,7 @@ print(res.decisions)     # 무엇이 어떻게 정해졌는지
 | Random split 격리 | 진단으로만 제공하고, 평가 경로 유입은 예외로 막습니다 |
 | nested CV 탐색 | 하이퍼파라미터를 고른 구간과 점수를 낸 구간을 분리합니다 (기본 OFF) |
 
-`python tests/run_tests.py` 로 369건이 이 장치들을 검증합니다.
+`python tests/run_tests.py` 로 379건이 이 장치들을 검증합니다.
 누수가 있으면 **실패하도록** 짜여 있어서, 전부 통과해야 결과를 믿을 수 있습니다.
 
 ---
@@ -308,7 +346,34 @@ shift = explain.period_shift(res, periods)              # 기여 비중 이동
 파일을 올리고 구분자·인코딩을 고릅니다. 사내 CSV 는 보통 `cp949` 입니다.
 
 ### SQL 쿼리
-접속 정보를 넣고 SELECT 문을 화면에서 직접 작성합니다. 내부적으로는 이렇게 돕니다.
+
+접속 정보를 **`connection.py` 에 한 번 적어 두면** 화면에는 SQL 입력창만 남습니다.
+호스트·계정·비밀번호 칸은 그리지 않고, 화면 어디에도 값이 뜨지 않습니다.
+
+```python
+# connection.py — 이 다섯 줄만 채우면 됩니다
+HOST     = "dm.internal.example.com"
+PORT     = 3108
+DATABASE = "master"
+USER     = "svc_ml"
+PASSWORD = "..."
+```
+
+저장하고 `run.bat` 을 다시 실행하면 반영됩니다. **비워 두면** 예전처럼 화면에서
+직접 입력하는 방식으로 도니, 이 파일을 건드리지 않아도 그대로 쓰실 수 있습니다.
+
+비밀번호를 파일에 적기 곤란하면 환경변수로도 됩니다 (환경변수가 우선합니다).
+
+```bat
+set ML_STUDIO_DB_PASSWORD=...
+run.bat
+```
+
+저장소에 들어 있는 `connection.py` 는 **비어 있습니다.** 값을 채운 뒤 그대로
+커밋하면 비밀번호가 저장소에 남으니, 회사 PC 안에서만 채워 쓰세요.
+`scripts/make_dist.py` 로 배포본을 만들면 이 값은 **자동으로 비워져** 나갑니다.
+
+내부적으로는 이렇게 돕니다.
 
 ```python
 import sqlalchemy as sa
