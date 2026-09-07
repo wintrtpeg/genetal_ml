@@ -39,7 +39,7 @@ run.bat           # Windows (더블클릭해도 됩니다)
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements-core.txt     # 반드시 성공해야 합니다
 pip install -r requirements-extra.txt    # 실패해도 무방합니다
-python tests/run_tests.py                # 368건 — 여기가 통과해야 결과를 믿을 수 있습니다
+python tests/run_tests.py                # 369건 — 여기가 통과해야 결과를 믿을 수 있습니다
 python scripts/verify_env.py             # 이 PC 에서만 확인되는 것들 (차트·SHAP·부스팅·SQL)
 python scripts/make_demo_data.py         # 가상 데이터 (선택)
 streamlit run app/main.py
@@ -242,7 +242,7 @@ print(res.decisions)     # 무엇이 어떻게 정해졌는지
 | Random split 격리 | 진단으로만 제공하고, 평가 경로 유입은 예외로 막습니다 |
 | nested CV 탐색 | 하이퍼파라미터를 고른 구간과 점수를 낸 구간을 분리합니다 (기본 OFF) |
 
-`python tests/run_tests.py` 로 368건이 이 장치들을 검증합니다.
+`python tests/run_tests.py` 로 369건이 이 장치들을 검증합니다.
 누수가 있으면 **실패하도록** 짜여 있어서, 전부 통과해야 결과를 믿을 수 있습니다.
 
 ---
