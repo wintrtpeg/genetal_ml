@@ -761,3 +761,123 @@ def test_mode_selector_comes_before_the_step_rail():
         _uninstall()
     assert order, "사이드바 라디오가 하나도 없습니다"
     assert order[0] == "radio:모드", f"모드가 첫 번째가 아닙니다: {order}"
+
+
+# ─────────────────────────────────────────────────────────────
+# 데이터마트 접속 정보를 코드에 둔 경우 (connection.py)
+# ─────────────────────────────────────────────────────────────
+# 현장에서는 붙는 곳이 늘 같은 데이터마트다. 그런데 호스트·계정·비밀번호 칸이
+# 화면 맨 위를 차지하고 있으면 정작 할 일(쿼리)이 아래로 밀리고, 켤 때마다 다시
+# 채워야 한다. 그래서 connection.py 에 값이 있으면 접속 항목을 아예 그리지 않는다.
+#
+# **비밀번호가 화면에 새는지를 반드시 본다.** 안 그리기로 해 놓고 어딘가에
+# 문자열로 흘리면 감춘 의미가 없다.
+import contextlib  # noqa: E402
+
+
+@contextlib.contextmanager
+def _connection_set(**over):
+    """connection.py 의 값을 잠깐 채워 둔다."""
+    import connection
+    keep = {k: getattr(connection, k) for k in
+            ("DRIVER", "HOST", "PORT", "DATABASE", "USER", "PASSWORD",
+             "LABEL", "PARAMS", "CONNECT_ARGS")}
+    filled = {"DRIVER": "sqream", "HOST": "dm.example.internal", "PORT": 3108,
+              "DATABASE": "master", "USER": "svc_ml", "PASSWORD": "s3cret-pw",
+              "LABEL": "생산 데이터마트", "PARAMS": {}, "CONNECT_ARGS": {}}
+    filled.update(over)
+    try:
+        for k, v in filled.items():
+            setattr(connection, k, v)
+        yield connection
+    finally:
+        for k, v in keep.items():
+            setattr(connection, k, v)
+
+
+def _rendered_text(rec: Recorder) -> str:
+    """화면에 흘러간 모든 문자열. 비밀번호가 섞였는지 보기 위한 것."""
+    out = []
+    for name, args, kw in rec.calls:
+        out.append(name)
+        out.extend(str(a) for a in args)
+        out.extend(f"{k}={v}" for k, v in kw.items())
+    out.extend(rec.widgets)
+    out.extend(f"{k}={v}" for k, v in rec.defaults.items())
+    return "\n".join(out)
+
+
+def test_blank_connection_still_asks_on_screen():
+    """connection.py 를 안 건드린 사람에게는 달라지는 것이 없어야 한다."""
+    import connection
+    assert not connection.is_configured(), (
+        "저장소에 들어 있는 connection.py 가 비어 있지 않습니다 — "
+        "접속 정보가 커밋된 것은 아닌지 확인하세요")
+
+    rec = _render("data_view", {})
+    text = _rendered_text(rec)
+    for label in ("호스트", "계정", "비밀번호"):
+        assert label in text, f"접속 정보를 화면에서 받지 않습니다 ({label} 없음)"
+
+
+def test_configured_connection_hides_every_credential_field():
+    """접속 정보를 코드에 두면 그 칸들이 화면에서 사라져야 한다."""
+    with _connection_set():
+        rec = _render("data_view", {})
+    text = _rendered_text(rec)
+
+    for label in ("호스트", "포트", "계정", "비밀번호", "DBMS",
+                  "SQLAlchemy 접속 URL", "입력 방식"):
+        assert label not in text, (
+            f"접속 정보를 코드에 뒀는데 '{label}' 칸이 그대로 화면에 있습니다")
+
+    # 쿼리는 여전히 받아야 한다 — 감추려던 것은 접속 정보뿐이다.
+    assert "SQL" in text, "쿼리 입력창이 사라졌습니다"
+    assert "생산 데이터마트" in text, "어디에 붙는지 알려주는 표시가 없습니다"
+
+
+def test_configured_connection_never_prints_the_password_or_host():
+    """비밀번호는 물론 호스트·계정도 화면에 나오면 안 된다."""
+    with _connection_set():
+        rec = _render("data_view", {})
+    text = _rendered_text(rec)
+
+    for secret in ("s3cret-pw", "dm.example.internal", "svc_ml"):
+        assert secret not in text, (
+            f"접속 정보가 화면 문자열에 들어 있습니다: {secret!r}")
+
+
+def test_configured_connection_builds_the_right_url():
+    """감추기만 하고 엉뚱한 데 붙으면 안 된다."""
+    from core import datasource
+    with _connection_set() as conn:
+        cfg = conn.settings()
+        url = datasource.build_url(
+            cfg["driver"], cfg["host"], cfg["port"], cfg["database"],
+            cfg["user"], cfg["password"], cfg["params"] or None)
+    assert url == "sqream://svc_ml:s3cret-pw@dm.example.internal:3108/master", url
+    assert "s3cret-pw" not in datasource.mask_url(url)
+
+
+def test_environment_variable_wins_over_the_file():
+    """파일에 비밀번호를 적기 곤란한 경우를 위한 경로."""
+    import os
+
+    import connection
+    with _connection_set():
+        os.environ["ML_STUDIO_DB_PASSWORD"] = "from-env"
+        os.environ["ML_STUDIO_DB_HOST"] = "other.host"
+        try:
+            cfg = connection.settings()
+            assert cfg["password"] == "from-env", cfg["password"]
+            assert cfg["host"] == "other.host", cfg["host"]
+        finally:
+            del os.environ["ML_STUDIO_DB_PASSWORD"]
+            del os.environ["ML_STUDIO_DB_HOST"]
+
+
+def test_partial_connection_is_not_treated_as_configured():
+    """호스트만 적고 DB 를 안 적었으면 감추면 안 된다 — 붙을 수가 없다."""
+    with _connection_set(DATABASE="") as conn:
+        assert not conn.is_configured()
+        assert "DATABASE" in conn.missing()

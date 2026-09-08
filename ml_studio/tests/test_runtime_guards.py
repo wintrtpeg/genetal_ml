@@ -1302,31 +1302,82 @@ def test_theme_wide_falls_back_when_width_is_pixels():
         st.dataframe = keep
 
 
-# ── 7. 사이드바 레일이 실제로 단계를 옮기는가 ────────────────
-# **레일을 눌러도 화면이 안 바뀌었다.** 눈으로 보기 전까지 아무도 몰랐다.
+# ── 7. 위젯이 고른 값을 코드가 덮어쓰는가 ────────────────────
+# **레일을 눌러도 단계가 안 넘어갔다.** 눈으로 보기 전까지 아무도 몰랐고,
+# 화면 렌더링 40여 조합이 전부 통과하고 있었다.
 #
-# 원인 — key 가 붙은 위젯은 사용자가 고른 값을 session_state 에 먼저 써 두고
-# 화면을 다시 그린다. 그 시점의 _step 은 아직 이전 단계다. 그런데 코드가
-# 위젯을 만들기 **전에** _rail 을 _step 에 맞추고 있어서, 방금 고른 값이
-# 덮여 사라졌다. 위젯 뒤에서 반환값을 읽어 봐야 이미 되돌려진 값이었다.
+# 형태 —
+#     S["_rail"] = idx                      # 위젯 **전에** 맞춘다
+#     choice = st.radio(..., key="_rail")   # 사용자가 고른 값은 이미 덮였다
 #
-# 대역(fake_streamlit)의 radio 는 key 도 session_state 도 보지 않는다. 그래서
-# 화면 렌더링 테스트 40여 조합이 전부 통과하면서도 이걸 못 잡았다. 대역을
-# 진짜처럼 만드는 것은 별개의 큰 일이므로, 여기서는 **깨졌던 형태로 되돌아가지
-# 않는 것**을 소스에서 지킨다.
-def test_rail_moves_the_step_through_on_change():
-    src = (APP / "main.py").read_text(encoding="utf-8")
-    i = src.index('key="_rail"')
-    around = src[max(0, i - 700):i + 200]
+# key 가 붙은 위젯은 사용자가 고른 값을 session_state 에 **먼저 쓰고** 화면을
+# 다시 그린다. 그 시점의 기준값(_step)은 아직 이전 것이므로, 위젯을 만들기 전에
+# session_state 를 기준값에 맞추면 방금 고른 값이 사라진다. 위젯 뒤에서
+# 반환값을 읽어 봐야 이미 되돌려진 값이다.
+#
+# on_change 는 다시 그리기 **전에** 돌기 때문에 거기서 기준값을 옮기면 된다.
+#
+# 대역(fake_streamlit)의 위젯은 `key` 도 session_state 도 보지 않고 label 로만
+# 값을 고른다. 그래서 이 상황 자체가 대역에서는 만들어지지 않는다. 대역이
+# 흉내 내지 못하는 자리는 통과해도 아무 말도 해 주지 않으므로, **형태를**
+# 소스에서 막는다. 레일 하나가 아니라 같은 부류 전부를 본다.
+def _widget_keys_and_state_assigns():
+    """(위젯 key -> 호출 정보, session_state 대입 key -> 위치) 를 모은다."""
+    widgets: dict[str, list] = {}
+    assigns: dict[str, list] = {}
+    for f in _py_files(APP, VIEWS):
+        tree = ast.parse(f.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                has_on_change = any(k.arg == "on_change" for k in node.keywords)
+                for kw in node.keywords:
+                    if (kw.arg == "key" and isinstance(kw.value, ast.Constant)
+                            and isinstance(kw.value.value, str)):
+                        widgets.setdefault(kw.value.value, []).append(
+                            (f.name, node.lineno, ast.unparse(node.func), has_on_change))
+            if isinstance(node, (ast.Assign, ast.AugAssign)):
+                targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                for t in targets:
+                    if (isinstance(t, ast.Subscript) and isinstance(t.slice, ast.Constant)
+                            and isinstance(t.slice.value, str)
+                            and ast.unparse(t.value) in ("S", "st.session_state")):
+                        assigns.setdefault(t.slice.value, []).append((f.name, node.lineno))
+    return widgets, assigns
 
-    assert "on_change=" in around, (
-        "레일 radio 에 on_change 가 없습니다. 위젯 반환값으로 _step 을 옮기면 "
+
+def test_widget_key_written_by_code_must_use_on_change():
+    """코드가 직접 대입하는 session_state 키를 위젯 key 로 쓰면 on_change 가 필요하다.
+
+    대입이 없으면 문제가 없다 — 위젯이 값의 유일한 주인이다. 대입이 있으면
+    위젯과 코드가 같은 칸을 두고 다투게 되고, 다시 그리는 순서상 **코드가 항상
+    이긴다.** 사용자의 선택이 조용히 사라진다.
+    """
+    widgets, assigns = _widget_keys_and_state_assigns()
+    bad = []
+    for key, sites in sorted(widgets.items()):
+        if key not in assigns:
+            continue
+        for fname, lineno, func, has_on_change in sites:
+            if not has_on_change:
+                where = ", ".join(f"{f}:{n}" for f, n in assigns[key])
+                bad.append(f"{fname}:{lineno}  {func}(key={key!r})  ← 대입: {where}")
+    assert not bad, (
+        "코드가 대입하는 session_state 키를 on_change 없이 위젯 key 로 쓰고 "
+        "있습니다. 사용자가 고른 값이 덮여 위젯이 안 먹습니다:\n  "
+        + "\n  ".join(bad))
+
+
+def test_rail_moves_the_step_through_on_change():
+    """레일은 실제로 걸렸던 자리라 따로 못을 박아 둔다."""
+    widgets, assigns = _widget_keys_and_state_assigns()
+    assert "_rail" in widgets, "레일 radio 의 key 가 '_rail' 이 아닙니다"
+    assert "_rail" in assigns, (
+        "레일이 더는 session_state 를 직접 맞추지 않습니다 — 이 테스트의 전제가 "
+        "바뀌었으니 위 일반 규칙만 남기고 이 테스트는 지우세요")
+    assert all(on_change for *_, on_change in widgets["_rail"]), (
+        "레일 radio 에 on_change 가 없습니다. 위젯 반환값으로 단계를 옮기면 "
         "사용자가 고른 값이 덮여서 레일을 눌러도 화면이 안 바뀝니다.")
 
-    # 깨졌던 형태: 위젯 뒤에서 반환값을 읽어 _step 에 넣는 것
-    after = src[i:i + 400]
-    assert not re.search(r"choice\s*=", around), (
-        "레일 radio 의 반환값을 받고 있습니다 — 그 값은 이미 _step 으로 "
-        "되돌려진 뒤라 클릭이 반영되지 않습니다. on_change 를 쓰세요.")
-    assert 'S["_step"] = keys[choice]' not in after, (
+    src = (APP / "main.py").read_text(encoding="utf-8")
+    assert 'S["_step"] = keys[choice]' not in src, (
         "위젯 반환값으로 _step 을 옮기는 옛 형태가 남아 있습니다.")

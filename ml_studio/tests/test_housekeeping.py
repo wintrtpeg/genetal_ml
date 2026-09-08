@@ -584,3 +584,87 @@ def test_the_grace_period_survives_the_same_run(runs, monkeypatch):
         assert len(list(runs.glob("run_*"))) == 2
     finally:
         _restore()
+
+
+# ─────────────────────────────────────────────────────────────
+# 배포 zip (scripts/make_dist.py)
+# ─────────────────────────────────────────────────────────────
+# 회사 PC 로 옮기는 통로다. 여기서 잘못되면 두 가지가 난다 —
+# 2GB 짜리 .venv 가 딸려 가서 못 옮기거나, connection.py 에 적어 둔
+# 데이터마트 계정이 함께 나간다. 둘 다 조용히 벌어진다.
+def test_dist_excludes_the_venv_and_run_artifacts():
+    """옮기면 안 되는 것이 zip 에 들어가지 않아야 한다."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "make_dist", ROOT / "scripts" / "make_dist.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    from pathlib import Path
+    for bad in (".venv/lib/x.py", "runs/2025/model.pkl", "app/__pycache__/x.pyc",
+                "app/main.pyc", "diagnostic_report.txt", "dist/old.zip",
+                ".git/config"):
+        assert not mod._wanted(ROOT / bad), f"{bad} 가 배포본에 들어갑니다"
+
+    for good in ("run.bat", "app/main.py", "core/train.py", "connection.py",
+                 "requirements-core.txt", "README.md"):
+        assert mod._wanted(ROOT / good), f"{good} 가 배포본에서 빠집니다"
+
+
+def test_dist_blanks_the_connection_credentials():
+    """접속 정보를 적어 둔 채로 zip 을 만들어도 계정이 나가면 안 된다.
+
+    기본값이 '비우고 넣기' 여야 한다. 남에게 보내는 순간 비밀번호가 함께
+    가는 사고는 되돌릴 수 없다.
+    """
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "make_dist", ROOT / "scripts" / "make_dist.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    filled = (
+        'DRIVER = "sqream"\n'
+        'HOST = "dm.plant.internal"   # 예: "dm.internal.example.com"\n'
+        'PORT = 3108\n'
+        'DATABASE = "master"\n'
+        'USER = "svc_ml"\n'
+        'PASSWORD = "s3cret-pw"\n'
+        'LABEL = "생산 데이터마트"\n'
+    )
+    out, cleared = mod._blank_connection(filled)
+
+    for secret in ("dm.plant.internal", "svc_ml", "s3cret-pw", "master"):
+        assert secret not in out, f"배포본에 접속 정보가 남았습니다: {secret}"
+    assert set(cleared) == {"HOST", "DATABASE", "USER", "PASSWORD"}, cleared
+
+    # 고치는 사람이 알아볼 수 있게 형태는 남아 있어야 한다
+    assert 'HOST = ""' in out and 'PASSWORD = ""' in out, out
+    assert 'DRIVER = "sqream"' in out, "DBMS 종류까지 지우면 다시 골라야 합니다"
+    assert 'LABEL = "생산 데이터마트"' in out, "이름은 비밀이 아닙니다"
+
+
+def test_dist_does_not_count_already_blank_fields_as_cleared():
+    """원래 비어 있던 것을 '비웠다' 고 보고하면 안 된다 — 안 한 일을 한 척이다."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "make_dist", ROOT / "scripts" / "make_dist.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    blank = 'HOST = ""\nDATABASE = ""\nUSER = ""\nPASSWORD = ""\n'
+    out, cleared = mod._blank_connection(blank)
+    assert cleared == [], cleared
+    assert out == blank
+
+
+def test_shipped_connection_file_is_blank():
+    """저장소에 들어 있는 connection.py 에 접속 정보가 커밋되면 안 된다."""
+    import sys
+    sys.path.insert(0, str(ROOT))
+    import connection
+    import importlib
+    importlib.reload(connection)
+    assert not connection.is_configured(), (
+        "connection.py 에 접속 정보가 채워진 채로 저장소에 들어 있습니다. "
+        "비우고 커밋하세요 (회사 PC 에서만 채워 쓰세요).")

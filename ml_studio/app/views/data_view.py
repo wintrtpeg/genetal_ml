@@ -7,6 +7,7 @@ import json
 import pandas as pd
 import streamlit as st
 
+import connection
 from app import state, theme
 from core import datasource, pipeline, plots
 
@@ -118,6 +119,44 @@ def _csv_panel() -> None:
 
 
 def _sql_panel() -> None:
+    """접속 정보가 connection.py 에 채워져 있으면 쿼리창만 남긴다.
+
+    현장에서 쓰는 사람은 접속 정보를 매번 넣을 이유가 없다 — 붙는 곳은 늘
+    같은 데이터마트다. 그런데 호스트·계정·비밀번호 칸이 화면 맨 위를 차지하고
+    있으면, 정작 할 일(쿼리)이 아래로 밀리고 매번 다시 채워야 한다.
+
+    그래서 `connection.py` 에 값이 있으면 그쪽을 쓰고 접속 항목은 아예 그리지
+    않는다. 비어 있으면 예전처럼 화면에서 받는다 — 그 파일을 건드리지 않은
+    사람에게는 달라지는 것이 없다.
+    """
+    if connection.is_configured():
+        url, connect_args = _fixed_connection()
+    else:
+        url, connect_args = _manual_connection()
+    _query_panel(url, connect_args)
+
+
+def _fixed_connection() -> tuple[str, dict]:
+    """connection.py 에 적힌 접속 정보를 쓴다. 화면에는 아무것도 받지 않는다."""
+    cfg = connection.settings()
+    url = datasource.build_url(
+        cfg["driver"], cfg["host"], cfg["port"], cfg["database"],
+        cfg["user"], cfg["password"], cfg["params"] or None)
+    connect_args = cfg["connect_args"] or datasource.DEFAULT_CONNECT_ARGS.get(
+        cfg["driver"], {})
+
+    # 어디에 붙는 중인지는 알려야 한다. 다만 호스트·계정은 적지 않는다 —
+    # connection.py 의 LABEL 에 적어 둔 이름만 보여준다.
+    label = cfg["label"] or "데이터마트"
+    st.markdown(f'<div class="advice advice-ok"><span class="advice-tag">접속</span>'
+                f'<b>{label}</b> 에 연결합니다. 접속 정보는 <code>connection.py</code> '
+                f'에 지정돼 있어 여기서는 묻지 않습니다.</div>',
+                unsafe_allow_html=True)
+    return url, connect_args
+
+
+def _manual_connection() -> tuple[str, dict]:
+    """접속 정보를 화면에서 받는다 (connection.py 가 비어 있을 때)."""
     S = st.session_state
     st.markdown("**접속 정보**")
     st.caption("평소 쓰시던 SQL 툴(DBeaver·DataGrip 등)의 접속 설정에 적힌 값 "
@@ -210,6 +249,12 @@ def _sql_panel() -> None:
         shown += f", connect_args={connect_args})" if connect_args else ")"
         st.code(f"engine = {shown}", language="python")
 
+    return url, connect_args
+
+
+def _query_panel(url: str, connect_args: dict) -> None:
+    """쿼리를 받아 실행한다. 접속 정보를 어디서 얻었든 여기는 같다."""
+    S = st.session_state
     st.markdown("**쿼리**")
     st.caption("평소 쓰시던 SELECT 문을 그대로 붙여넣으시면 됩니다. "
                "**시간 컬럼을 꼭 함께 뽑고 시간순으로 정렬**해 주세요 — "
@@ -235,7 +280,11 @@ def _sql_panel() -> None:
             st.error(f"접속 실패 — {type(e).__name__}: {e}")
 
     if c2.button("실행", type="primary", key="sql_run"):
-        S.sql_query, S.sql_url = query, url
+        S.sql_query = query
+        # 접속 정보를 코드에 둔 경우에는 URL 을 상태에 남기지 않는다. 되살릴
+        # 입력칸이 없어서 쓸 데가 없고, 비밀번호가 들어 있는 문자열이다.
+        if not connection.is_configured():
+            S.sql_url = url
         try:
             src = datasource.SqlAlchemySource(url, query, chunksize=chunk or None,
                                               connect_args=connect_args)
